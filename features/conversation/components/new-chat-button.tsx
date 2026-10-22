@@ -1,0 +1,22 @@
+"use client";
+
+import { Plus } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+
+interface NewChatButtonProps {
+    onClick: () => void;
+}
+
+export function NewChatButton({ onClick }: NewChatButtonProps) {
+    return (
+        <Button
+            variant="outline"
+            className="w-full justify-start gap-2"
+            onClick={onClick}
+        >
+            <Plus className="size-4" />
+            New chat
+        </Button>
+    );
+}
