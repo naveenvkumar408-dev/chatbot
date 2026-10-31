@@ -7,6 +7,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "../hooks/use-auth";
+import { PasswordInput } from "@/components/shared/password-input";
+import { getLoginErrorMessage } from "@/lib/auth/auth-errors";
 
 export function LoginForm() {
     const router = useRouter();
@@ -15,27 +17,26 @@ export function LoginForm() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 
-    const [error, setError] = useState("");
+    const [errorMessage, setErrorMessage] = useState("");
 
-    const handleSubmit = async (
-        event: React.FormEvent<HTMLFormElement>,
-    ) => {
+    async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        setErrorMessage("");
 
-        setError("");
+        try {
+            const result = await login({ email, password });
 
-        const result = await login({
-            email,
-            password,
-        });
+            if (!result.success) {
+                setErrorMessage(getLoginErrorMessage(result.error));
+                return;
+            }
 
-        if (!result.success) {
-            setError(result.error ?? "Something went wrong.");
-            return;
+            router.replace("/chat");
+            router.refresh();
+        } catch (error: unknown) {
+            setErrorMessage(getLoginErrorMessage(error));
         }
-
-        router.push("/chat");
-    };
+    }
 
     return (
         <div className="w-full max-w-md space-y-6">
@@ -49,7 +50,7 @@ export function LoginForm() {
                 </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                     <label
                         htmlFor="email"
@@ -76,28 +77,25 @@ export function LoginForm() {
                         Password
                     </label>
 
-                    <Input
-                        id="password"
-                        type="password"
-                        placeholder="Enter Your passsword"
-                        value={password}
-                        onChange={(event) =>
-                            setPassword(event.target.value)
-                        }
+                    <PasswordInput
+                        name="password"
+                        placeholder="Enter Your password"
+                        autoComplete="current-password"
+                        onChange={(event) => setPassword(event.target.value)}
                         required
                     />
                 </div>
 
-                {error && (
+                {errorMessage && (
                     <p className="text-sm text-destructive">
-                        {error}
+                        {errorMessage}
                     </p>
                 )}
 
                 <Button
                     type="submit"
                     variant="default"
-                    className="w-full bg-white text-black hover:cursor-pointer hover:bg-white/80"
+                    className="w-full bg-black text-white hover:cursor-pointer hover:bg-black/80"
                     disabled={isLoading}
                 >
                     {isLoading ? "Logging in..." : "Log in"}

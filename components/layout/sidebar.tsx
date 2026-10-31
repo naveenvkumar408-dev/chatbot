@@ -7,17 +7,16 @@ import {
     PanelLeftClose,
     PanelLeftOpen,
     MessageSquarePlus,
-    MessageSquare,
-    UserRound,
+    MessageSquare
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { NewChatButton } from "@/features/conversation/components/new-chat-button";
 import { ConversationList } from "@/features/conversation/components/conversation-list";
 import type { Conversation } from "@/features/conversation/types/conversation.types";
 import { useProfile } from "@/features/profile/hooks/use-profile";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { SidebarProfile } from "@/components/layout/profile-section"
 
 interface SidebarProps {
     conversations: Conversation[];
@@ -42,22 +41,6 @@ export function Sidebar({
     collapsed,
     onToggle,
 }: SidebarProps) {
-    const { profile, isLoaded: profileLoaded } = useProfile();
-    const { user } = useAuth();
-
-    const displayName =
-        profile.fullName.trim() || user?.name || "My Profile";
-
-    const email = user?.email || "View your profile";
-
-    const initials =
-        displayName
-            .trim()
-            .split(/\s+/)
-            .slice(0, 2)
-            .map((part) => part[0]?.toUpperCase() ?? "")
-            .join("") || "U";
-
     return (
         <aside
             className={`flex h-full shrink-0 flex-col overflow-hidden border-r bg-muted/40 p-3 transition-[width] duration-200 ease-in-out ${collapsed ? "w-[68px]" : "w-72"
@@ -161,54 +144,9 @@ export function Sidebar({
                 )}
             </div>
 
-            <Separator className="my-3 shrink-0" />
-
             {/* Profile area */}
-            <div className="shrink-0">
-                {collapsed ? (
-                    <Link
-                        href="/chat?view=profile"
-                        aria-label="View profile"
-                        title={`${displayName} — ${email}`}
-                        className="mx-auto flex size-10 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold"
-                    >
-                        {profileLoaded && profile.avatarUrl ? (
-                            <img
-                                src={profile.avatarUrl}
-                                alt="Profile"
-                                className="size-full object-cover"
-                            />
-                        ) : (
-                            initials
-                        )}
-                    </Link>
-                ) : (
-                    <Link
-                        href="/chat?view=profile"
-                        className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-accent"
-                    >
-                        <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold">
-                            {profileLoaded && profile.avatarUrl ? (
-                                <img
-                                    src={profile.avatarUrl}
-                                    alt="Profile"
-                                    className="size-full object-cover"
-                                />
-                            ) : (
-                                initials
-                            )}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">
-                                {displayName}
-                            </p>
-                            <p className="truncate text-xs text-muted-foreground">
-                                {email}
-                            </p>
-                        </div>
-                    </Link>
-                )}
+            <div className="mt-auto">
+                <SidebarProfile />
             </div>
 
 
