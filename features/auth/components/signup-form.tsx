@@ -7,6 +7,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "../hooks/use-auth";
+import { PasswordInput } from "@/components/shared/password-input";
+import { getSignupErrorMessage } from "@/lib/auth/auth-errors";
 
 export function SignupForm() {
     const router = useRouter();
@@ -16,28 +18,28 @@ export function SignupForm() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 
-    const [error, setError] = useState("");
+    const [errorMessage, setErrorMessage] = useState("");
 
-    const handleSubmit = async (
-        event: React.FormEvent<HTMLFormElement>,
-    ) => {
+
+    async function handleSignup(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        setErrorMessage("");
 
-        setError("");
+        try {
+            const result = await signup({ name, email, password });
 
-        const result = await signup({
-            name,
-            email,
-            password,
-        });
+            if (!result.success) {
+                setErrorMessage(getSignupErrorMessage(result.error));
+                return;
+            }
 
-        if (!result.success) {
-            setError(result.error ?? "Something went wrong.");
-            return;
+            router.replace("/chat");
+            router.refresh();
+        } catch (error: unknown) {
+            setErrorMessage(getSignupErrorMessage(error));
         }
+    }
 
-        router.push("/chat");
-    };
 
     return (
         <div className="w-full max-w-md space-y-6">
@@ -51,7 +53,7 @@ export function SignupForm() {
                 </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSignup} className="space-y-4">
                 <div className="space-y-2">
                     <label
                         htmlFor="name"
@@ -96,22 +98,20 @@ export function SignupForm() {
                         Password
                     </label>
 
-                    <Input
+                    <PasswordInput
                         id="password"
-                        type="password"
-                        placeholder="Enter Your passsword"
+                        name="password"
+                        placeholder="Enter your password"
+                        autoComplete="new-password"
                         value={password}
-                        onChange={(event) =>
-                            setPassword(event.target.value)
-                        }
-                        minLength={6}
+                        onChange={(event) => setPassword(event.target.value)}
                         required
                     />
                 </div>
 
-                {error && (
+                {errorMessage && (
                     <p className="text-sm text-destructive">
-                        {error}
+                        {errorMessage}
                     </p>
                 )}
 
