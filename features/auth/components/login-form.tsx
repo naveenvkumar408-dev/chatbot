@@ -78,16 +78,18 @@ export function LoginForm() {
                     </label>
 
                     <PasswordInput
+                        id="password"
                         name="password"
                         placeholder="Enter Your password"
                         autoComplete="current-password"
+                        value={password}
                         onChange={(event) => setPassword(event.target.value)}
                         required
                     />
                 </div>
 
                 {errorMessage && (
-                    <p className="text-sm text-destructive">
+                    <p role="alert" className="text-sm text-destructive">
                         {errorMessage}
                     </p>
                 )}

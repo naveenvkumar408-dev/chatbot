@@ -1,16 +1,17 @@
-
 export interface UserProfile {
+    id: string;
     fullName: string;
-    username: string;
+    email: string;
     bio: string;
+    imageKey: string | null;
     avatarUrl: string;
-    updatedAt: string;
 }
 
 export const DEFAULT_PROFILE: UserProfile = {
+    id: "",
     fullName: "",
-    username: "",
+    email: "",
     bio: "",
+    imageKey: null,
     avatarUrl: "",
-    updatedAt: "",
 };

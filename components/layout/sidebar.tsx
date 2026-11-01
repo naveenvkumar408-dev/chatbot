@@ -14,8 +14,6 @@ import { Button } from "@/components/ui/button";
 import { NewChatButton } from "@/features/conversation/components/new-chat-button";
 import { ConversationList } from "@/features/conversation/components/conversation-list";
 import type { Conversation } from "@/features/conversation/types/conversation.types";
-import { useProfile } from "@/features/profile/hooks/use-profile";
-import { useAuth } from "@/features/auth/hooks/use-auth";
 import { SidebarProfile } from "@/components/layout/profile-section"
 
 interface SidebarProps {
