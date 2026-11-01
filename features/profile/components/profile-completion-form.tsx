@@ -1,7 +1,13 @@
 
 "use client";
 
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+    useEffect,
+    useRef,
+    useState,
+    type ChangeEvent,
+    type FormEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, UserRound, Upload, X } from "lucide-react";
 
@@ -11,79 +17,47 @@ import { Input } from "@/components/ui/input";
 import { useProfile } from "@/features/profile/hooks/use-profile";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-const AVATAR_SIZE = 256;
-
-async function resizeAvatar(file: File): Promise<string> {
-    const image = await createImageBitmap(file);
-
-    try {
-        const canvas = document.createElement("canvas");
-        canvas.width = AVATAR_SIZE;
-        canvas.height = AVATAR_SIZE;
-
-        const context = canvas.getContext("2d");
-
-        if (!context) {
-            throw new Error("Could not process this image.");
-        }
-
-        const scale = Math.max(
-            AVATAR_SIZE / image.width,
-            AVATAR_SIZE / image.height
-        );
-
-        const width = image.width * scale;
-        const height = image.height * scale;
-
-        context.drawImage(
-            image,
-            (AVATAR_SIZE - width) / 2,
-            (AVATAR_SIZE - height) / 2,
-            width,
-            height
-        );
-
-        return canvas.toDataURL("image/jpeg", 0.8);
-    } finally {
-        image.close();
-    }
-}
+const ALLOWED_IMAGE_TYPES = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+];
 
 export function ProfileCompletionForm() {
     const router = useRouter();
-    const { profile, isLoaded, saveProfile } = useProfile();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const {
+        profile,
+        isLoaded,
+        isSaving,
+        isUploading,
+        error,
+        setError,
+        saveProfile,
+        uploadAvatar,
+        removeAvatar,
+    } = useProfile();
 
     const [fullName, setFullName] = useState("");
-    const [username, setUsername] = useState("");
     const [bio, setBio] = useState("");
-    const [avatarUrl, setAvatarUrl] = useState("");
     const [saved, setSaved] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState("");
+    const [statusMessage, setStatusMessage] = useState("");
 
     useEffect(() => {
         if (!isLoaded) return;
 
         setFullName(profile.fullName);
-        setUsername(profile.username);
         setBio(profile.bio);
-        setAvatarUrl(profile.avatarUrl || "");
-    }, [
-        isLoaded,
-        profile.fullName,
-        profile.username,
-        profile.bio,
-        profile.avatarUrl,
-    ]);
+    }, [isLoaded, profile.fullName, profile.bio]);
 
     const completion = [
         fullName.trim().length > 0,
-        username.trim().length > 0,
         bio.trim().length > 0,
-        avatarUrl.length > 0,
+        Boolean(profile.avatarUrl),
     ].filter(Boolean).length;
 
-    const progress = Math.round((completion / 4) * 100);
+    const progress = Math.round((completion / 3) * 100);
 
     const initials =
         fullName
@@ -97,67 +71,74 @@ export function ProfileCompletionForm() {
         event: ChangeEvent<HTMLInputElement>
     ) {
         const file = event.currentTarget.files?.[0];
+
+        // Allow selecting the same file again later.
         event.currentTarget.value = "";
 
         if (!file) return;
 
         setError("");
         setSaved(false);
+        setStatusMessage("");
 
-        if (!file.type.startsWith("image/")) {
-            setError("Please select an image file.");
+        if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+            setError("Choose a JPEG, PNG, or WebP image.");
             return;
         }
 
-        if (file.size > MAX_IMAGE_SIZE) {
+        if (file.size === 0 || file.size > MAX_IMAGE_SIZE) {
             setError("Choose an image smaller than 5 MB.");
             return;
         }
 
-        try {
-            const resizedImage = await resizeAvatar(file);
-            setAvatarUrl(resizedImage);
-        } catch {
-            setError("Could not process this image. Try another one.");
+        const success = await uploadAvatar(file);
+
+        if (success) {
+            setStatusMessage("Profile picture uploaded successfully.");
         }
     }
 
-    function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    async function handleRemoveAvatar() {
+        setError("");
+        setSaved(false);
+        setStatusMessage("");
+
+        const success = await removeAvatar();
+
+        if (success) {
+            setStatusMessage("Profile picture removed.");
+        }
+    }
+
+    async function handleSubmit(
+        event: FormEvent<HTMLFormElement>
+    ) {
         event.preventDefault();
 
         setSaved(false);
         setError("");
+        setStatusMessage("");
 
         const cleanName = fullName.trim();
-        const cleanUsername = username.trim().replace(/^@/, "");
 
-        if (!cleanName) {
-            setError("Please enter your full name.");
+        if (!cleanName || cleanName.length > 100) {
+            setError("Name must be between 1 and 100 characters.");
             return;
         }
 
-        if (!/^[a-zA-Z0-9_]{3,20}$/.test(cleanUsername)) {
-            setError(
-                "Username must be 3–20 characters using letters, numbers, or underscores."
-            );
+        if (bio.length > 500) {
+            setError("Bio must be 500 characters or fewer.");
             return;
         }
 
-        setIsSaving(true);
-
-        const success = saveProfile({
+        const success = await saveProfile({
             fullName: cleanName,
-            username: cleanUsername,
-            bio: bio.trim(),
-            avatarUrl,
+            bio,
         });
 
-        setIsSaving(false);
-
         if (success) {
-            router.push("/chat");
-        } else {
-            setError("Could not save your profile. Please try again.");
+            setSaved(true);
+            setStatusMessage("Profile saved successfully.");
         }
     }
 
@@ -172,15 +153,26 @@ export function ProfileCompletionForm() {
     return (
         <div className="mx-auto w-full max-w-2xl px-5 py-8 sm:px-8">
             <div className="mb-8">
+                <Button
+                    type="button"
+                    variant="ghost"
+                    className="-ml-3 mb-4"
+                    onClick={() => router.push("/chat")}
+                >
+                    <ArrowLeft className="mr-2 size-4" />
+                    Back to chat
+                </Button>
+
                 <p className="text-sm font-medium text-primary">
                     YOUR ACCOUNT
                 </p>
+
                 <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-                    Complete your profile
+                    Your profile
                 </h1>
+
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    Add a few details so your account feels like yours.
-                    You can update these details at any time.
+                    Manage your account information and profile picture.
                 </p>
             </div>
 
@@ -188,10 +180,10 @@ export function ProfileCompletionForm() {
             <div className="mb-8 rounded-xl border p-4 sm:p-5">
                 <div className="flex items-center gap-4">
                     <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-lg font-semibold">
-                        {avatarUrl ? (
+                        {profile.avatarUrl ? (
                             <img
-                                src={avatarUrl}
-                                alt="Profile preview"
+                                src={profile.avatarUrl}
+                                alt="Profile picture"
                                 className="size-full object-cover"
                             />
                         ) : initials === "U" ? (
@@ -205,11 +197,11 @@ export function ProfileCompletionForm() {
                         <p className="truncate font-medium">
                             {fullName.trim() || "Your name"}
                         </p>
+
                         <p className="mt-1 truncate text-sm text-muted-foreground">
-                            {username.trim()
-                                ? `@${username.trim().replace(/^@/, "")}`
-                                : "Your username"}
+                            {profile.email}
                         </p>
+
                         {bio.trim() && (
                             <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
                                 {bio}
@@ -225,6 +217,7 @@ export function ProfileCompletionForm() {
                         </span>
                         <span className="font-medium">{progress}%</span>
                     </div>
+
                     <div
                         className="h-2 overflow-hidden rounded-full bg-secondary"
                         role="progressbar"
@@ -242,7 +235,7 @@ export function ProfileCompletionForm() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Avatar upload */}
+                {/* S3 profile image */}
                 <div className="space-y-3">
                     <label className="text-sm font-medium">
                         Profile picture
@@ -250,10 +243,10 @@ export function ProfileCompletionForm() {
 
                     <div className="flex flex-wrap items-center gap-4">
                         <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-secondary">
-                            {avatarUrl ? (
+                            {profile.avatarUrl ? (
                                 <img
-                                    src={avatarUrl}
-                                    alt="Selected profile picture"
+                                    src={profile.avatarUrl}
+                                    alt="Current profile picture"
                                     className="size-full object-cover"
                                 />
                             ) : (
@@ -265,22 +258,21 @@ export function ProfileCompletionForm() {
                             <Button
                                 type="button"
                                 variant="outline"
+                                disabled={isUploading}
                                 onClick={() =>
-                                    document.getElementById("avatarUpload")?.click()
+                                    fileInputRef.current?.click()
                                 }
                             >
                                 <Upload className="mr-2 size-4" />
-                                Upload image
+                                {isUploading ? "Please wait..." : "Upload image"}
                             </Button>
 
-                            {avatarUrl && (
+                            {profile.imageKey && (
                                 <Button
                                     type="button"
                                     variant="ghost"
-                                    onClick={() => {
-                                        setAvatarUrl("");
-                                        setSaved(false);
-                                    }}
+                                    disabled={isUploading}
+                                    onClick={() => void handleRemoveAvatar()}
                                 >
                                     <X className="mr-2 size-4" />
                                     Remove
@@ -289,24 +281,28 @@ export function ProfileCompletionForm() {
                         </div>
 
                         <input
-                            id="avatarUpload"
+                            ref={fileInputRef}
                             type="file"
-                            accept="image/*"
+                            accept="image/jpeg,image/png,image/webp"
                             className="hidden"
-                            onChange={handleAvatarChange}
+                            disabled={isUploading}
+                            onChange={(event) =>
+                                void handleAvatarChange(event)
+                            }
                         />
                     </div>
 
                     <p className="text-xs text-muted-foreground">
-                        JPG, PNG, or another image format. Maximum 5 MB.
+                        JPEG, PNG, or WebP. Maximum 5 MB.
                     </p>
                 </div>
 
-                {/* Full name */}
+                {/* Name is saved in neon_auth."user" */}
                 <div className="space-y-2">
                     <label htmlFor="fullName" className="text-sm font-medium">
                         Full name *
                     </label>
+
                     <Input
                         id="fullName"
                         name="fullName"
@@ -317,39 +313,38 @@ export function ProfileCompletionForm() {
                             setSaved(false);
                             setError("");
                         }}
+                        maxLength={100}
                         placeholder="Enter your full name"
                         required
                     />
                 </div>
 
-                {/* Username */}
+                {/* Email is read from Neon Auth */}
                 <div className="space-y-2">
-                    <label htmlFor="username" className="text-sm font-medium">
-                        Username *
+                    <label htmlFor="email" className="text-sm font-medium">
+                        Email address
                     </label>
+
                     <Input
-                        id="username"
-                        name="username"
-                        autoComplete="username"
-                        value={username}
-                        onChange={(event) => {
-                            setUsername(event.currentTarget.value);
-                            setSaved(false);
-                            setError("");
-                        }}
-                        placeholder="e.g. alex_smith"
-                        required
+                        id="email"
+                        name="email"
+                        type="email"
+                        value={profile.email}
+                        readOnly
+                        disabled
                     />
+
                     <p className="text-xs text-muted-foreground">
-                        3–20 characters. Letters, numbers, and underscores only.
+                        Your email is managed by your authentication account.
                     </p>
                 </div>
 
-                {/* Bio */}
+                {/* Bio is saved in public.profiles */}
                 <div className="space-y-2">
                     <label htmlFor="bio" className="text-sm font-medium">
                         About you
                     </label>
+
                     <Textarea
                         id="bio"
                         name="bio"
@@ -361,7 +356,12 @@ export function ProfileCompletionForm() {
                         }}
                         placeholder="Tell us a little about yourself..."
                         rows={4}
+                        maxLength={500}
                     />
+
+                    <p className="text-right text-xs text-muted-foreground">
+                        {bio.length}/500
+                    </p>
                 </div>
 
                 {error && (
@@ -370,13 +370,16 @@ export function ProfileCompletionForm() {
                     </p>
                 )}
 
+                {statusMessage && (
+                    <p role="status" className="text-sm text-green-600">
+                        {statusMessage}
+                    </p>
+                )}
+
                 {saved && (
-                    <p
-                        role="status"
-                        className="flex items-center gap-2 text-sm text-green-600"
-                    >
+                    <p className="flex items-center gap-2 text-sm text-green-600">
                         <Check className="size-4" />
-                        Profile saved successfully.
+                        Changes saved.
                     </p>
                 )}
 
@@ -386,11 +389,14 @@ export function ProfileCompletionForm() {
                         variant="outline"
                         onClick={() => router.push("/chat")}
                     >
-                        Do this later
+                        Cancel
                     </Button>
 
-                    <Button type="submit" disabled={isSaving}>
-                        {isSaving ? "Saving..." : "Save profile"}
+                    <Button
+                        type="submit"
+                        disabled={isSaving || isUploading}
+                    >
+                        {isSaving ? "Saving..." : "Save changes"}
                     </Button>
                 </div>
             </form>
