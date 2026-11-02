@@ -1,218 +1,214 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
 import {
-    DEFAULT_PROFILE,
-    type UserProfile,
+  DEFAULT_PROFILE,
+  type UserProfile,
 } from "@/features/profile/types/profile.types";
 
 type ApiProfile = {
-    id: string;
-    name: string | null;
-    email: string;
-    bio: string | null;
-    imageKey: string | null;
-    imageUrl?: string | null;
-    image?: string | null;
+  id: string;
+  name: string | null;
+  email: string;
+  bio: string | null;
+  imageKey: string | null;
+  imageUrl?: string | null;
+  image?: string | null;
 };
 
-async function readResponse(response: Response) {
-    const data: unknown = await response.json().catch(() => ({}));
+async function readResponse(response: Response): Promise<unknown> {
+  const data: unknown = await response.json().catch(() => ({}));
 
-    if (!response.ok) {
-        const message =
-            data &&
-            typeof data === "object" &&
-            "error" in data &&
-            typeof data.error === "string"
-                ? data.error
-                : "Request failed. Please try again.";
+  if (!response.ok) {
+    const message =
+      data &&
+      typeof data === "object" &&
+      "error" in data &&
+      typeof data.error === "string"
+        ? data.error
+        : "Request failed. Please try again.";
 
-        throw new Error(message);
-    }
+    throw new Error(message);
+  }
 
-    return data;
+  return data;
 }
 
 function mapProfile(data: ApiProfile): UserProfile {
-    return {
-        id: data.id,
-        fullName: data.name ?? "",
-        email: data.email ?? "",
-        bio: data.bio ?? "",
-        imageKey: data.imageKey ?? null,
-        avatarUrl: data.imageUrl ?? data.image ?? "",
-    };
+  return {
+    id: data.id,
+    fullName: data.name ?? "",
+    email: data.email ?? "",
+    bio: data.bio ?? "",
+    imageKey: data.imageKey ?? null,
+    avatarUrl: data.imageUrl ?? data.image ?? "",
+  };
 }
 
 export function useProfile() {
-    const [profile, setProfile] =
-        useState<UserProfile>(DEFAULT_PROFILE);
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
 
-    const [isLoaded, setIsLoaded] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
-    const [error, setError] = useState("");
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState("");
 
-    const reloadProfile = useCallback(async () => {
+  const reloadProfile = useCallback(async () => {
+    const response = await fetch("/api/profile", {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+
+    const data = (await readResponse(response)) as ApiProfile;
+    setProfile(mapProfile(data));
+  }, []);
+
+  // Load the profile once when the hook mounts.
+  useEffect(() => {
+  let active = true;
+
+  async function load() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch("/api/profile", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+
+      const data = (await readResponse(response)) as ApiProfile;
+
+      if (active) {
+        setProfile(mapProfile(data));
+      }
+    } catch (err) {
+      if (active) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not load profile."
+        );
+      }
+    } finally {
+      if (active) {
+        setLoading(false); // Important: false
+        setIsLoaded(true);
+      }
+    }
+  }
+
+  void load();
+
+  return () => {
+    active = false;
+  };
+}, []);
+
+  const saveProfile = useCallback(
+    async (values: { fullName: string; bio: string }) => {
+      setIsSaving(true);
+      setError("");
+
+      try {
         const response = await fetch("/api/profile", {
-            method: "GET",
-            credentials: "same-origin",
-            cache: "no-store",
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: values.fullName.trim(),
+            bio: values.bio.trim(),
+          }),
         });
 
-        const data = (await readResponse(response)) as ApiProfile;
-        setProfile(mapProfile(data));
-    }, []);
+        await readResponse(response);
+        await reloadProfile();
 
-    useEffect(() => {
-        let active = true;
+        return true;
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Could not save profile.",
+        );
 
-        async function load() {
-            try {
-                setError("");
+        return false;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [reloadProfile],
+  );
 
-                const response = await fetch("/api/profile", {
-                    credentials: "same-origin",
-                    cache: "no-store",
-                });
+  const uploadAvatar = useCallback(
+    async (file: File) => {
+      setIsUploading(true);
+      setError("");
 
-                const data = (await readResponse(response)) as ApiProfile;
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
 
-                if (active) {
-                    setProfile(mapProfile(data));
-                }
-            } catch (err) {
-                if (active) {
-                    setError(
-                        err instanceof Error
-                            ? err.message
-                            : "Could not load profile."
-                    );
-                }
-            } finally {
-                if (active) {
-                    setIsLoaded(true);
-                }
-            }
-        }
+        const response = await fetch("/api/profile/image", {
+          method: "POST",
+          credentials: "same-origin",
+          body: formData,
+        });
 
-        void load();
+        await readResponse(response);
+        await reloadProfile();
 
-        return () => {
-            active = false;
-        };
-    }, []);
+        return true;
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Could not upload image.",
+        );
 
-    const saveProfile = useCallback(
-        async (values: { fullName: string; bio: string }) => {
-            setIsSaving(true);
-            setError("");
+        return false;
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [reloadProfile],
+  );
 
-            try {
-                const response = await fetch("/api/profile", {
-                    method: "PATCH",
-                    credentials: "same-origin",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        name: values.fullName.trim(),
-                        bio: values.bio.trim(),
-                    }),
-                });
+  const removeAvatar = useCallback(async () => {
+    setIsUploading(true);
+    setError("");
 
-                await readResponse(response);
-                await reloadProfile();
+    try {
+      const response = await fetch("/api/profile/image", {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
 
-                return true;
-            } catch (err) {
-                setError(
-                    err instanceof Error
-                        ? err.message
-                        : "Could not save profile."
-                );
+      await readResponse(response);
+      await reloadProfile();
 
-                return false;
-            } finally {
-                setIsSaving(false);
-            }
-        },
-        [reloadProfile]
-    );
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove image.");
 
-    const uploadAvatar = useCallback(
-        async (file: File) => {
-            setIsUploading(true);
-            setError("");
+      return false;
+    } finally {
+      setIsUploading(false);
+    }
+  }, [reloadProfile]);
 
-            try {
-                const formData = new FormData();
-                formData.append("file", file);
-
-                const response = await fetch("/api/profile/image", {
-                    method: "POST",
-                    credentials: "same-origin",
-                    body: formData,
-                });
-
-                await readResponse(response);
-                await reloadProfile();
-
-                return true;
-            } catch (err) {
-                setError(
-                    err instanceof Error
-                        ? err.message
-                        : "Could not upload image."
-                );
-
-                return false;
-            } finally {
-                setIsUploading(false);
-            }
-        },
-        [reloadProfile]
-    );
-
-    const removeAvatar = useCallback(async () => {
-        setIsUploading(true);
-        setError("");
-
-        try {
-            const response = await fetch("/api/profile/image", {
-                method: "DELETE",
-                credentials: "same-origin",
-            });
-
-            await readResponse(response);
-            await reloadProfile();
-
-            return true;
-        } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Could not remove image."
-            );
-
-            return false;
-        } finally {
-            setIsUploading(false);
-        }
-    }, [reloadProfile]);
-
-    return {
-        profile,
-        isLoaded,
-        isSaving,
-        isUploading,
-        error,
-        setError,
-        saveProfile,
-        uploadAvatar,
-        removeAvatar,
-        reloadProfile,
-    };
+  return {
+    profile,
+    isLoaded,
+    loading,
+    isSaving,
+    isUploading,
+    error,
+    setError,
+    saveProfile,
+    uploadAvatar,
+    removeAvatar,
+    reloadProfile,
+  };
 }
