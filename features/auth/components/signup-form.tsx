@@ -117,7 +117,7 @@ export function SignupForm() {
 
                 <Button
                     type="submit"
-                    className="w-full bg-white text-black hover:cursor-pointer hover:bg-white/80"
+                    className="w-full bg-black text-white hover:cursor-pointer hover:bg-black/80"
                     disabled={isLoading}
                 >
                     {isLoading ? "Creating account..." : "Create account"}

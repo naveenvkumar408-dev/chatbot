@@ -3,9 +3,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, UserRound } from "lucide-react";
+import {
+  LogOut,
+  Settings,
+  UserRound,
+  Palette,
+} from "lucide-react";
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,9 +20,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export function SidebarProfile() {
+type SettingsSection = "profile" | "appearance";
+
+interface SidebarProfileProps {
+  settingsMode?: boolean;
+  activeSettingsSection?: SettingsSection;
+  onSelectSettingsSection?: (section: SettingsSection) => void;
+}
+
+export function SidebarProfile({
+  settingsMode = false,
+  activeSettingsSection = "profile",
+  onSelectSettingsSection,
+}: SidebarProfileProps) {
   const router = useRouter();
-  const { user, isLoading, logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
@@ -38,8 +56,61 @@ export function SidebarProfile() {
     }
   }
 
-  const displayName = user?.name?.trim() || user?.email || "My account";
-  const initial = displayName.charAt(0).toUpperCase();
+  if (settingsMode) {
+    const items = [
+      {
+        id: "profile" as const,
+        label: "Profile",
+        icon: UserRound,
+      },
+      {
+        id: "appearance" as const,
+        label: "Appearance",
+        icon: Palette,
+      },
+    ];
+
+    return (
+      <div className="w-full space-y-1">
+        {items.map((item) => {
+          const Icon = item.icon;
+          const active = activeSettingsSection === item.id;
+
+          return (
+            <Button
+              key={item.id}
+              type="button"
+              variant={active ? "secondary" : "ghost"}
+              className="w-full justify-start gap-3"
+              onClick={() => onSelectSettingsSection?.(item.id)}
+            >
+              <Icon className="size-4" />
+              {item.label}
+            </Button>
+          );
+        })}
+
+        <div className="my-2 border-t" />
+
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full justify-start gap-3 text-destructive hover:text-destructive"
+          disabled={loggingOut}
+          onClick={handleLogout}
+        >
+          <LogOut className="size-4" />
+          {loggingOut ? "Logging out..." : "Log out"}
+        </Button>
+
+        {logoutError && (
+          <p role="alert" className="px-2 pt-2 text-xs text-destructive">
+            {logoutError}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
@@ -49,12 +120,10 @@ export function SidebarProfile() {
           disabled={loggingOut}
           className="flex w-full cursor-pointer items-center gap-3 rounded-xl p-3 text-left hover:bg-accent"
         >
-          {/* Avatar */}
           <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted font-medium">
             {user?.name?.charAt(0)?.toUpperCase() || "U"}
           </div>
 
-          {/* User details */}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">
               {user?.name || "My account"}
@@ -66,9 +135,13 @@ export function SidebarProfile() {
         </DropdownMenuTrigger>
 
         <DropdownMenuContent side="top" align="start" className="w-56">
-          <DropdownMenuItem onClick={() => router.push("/profile")}>
-            <span><UserRound className="size-4" /></span>
-            Profile
+          <DropdownMenuItem
+            onClick={() =>
+              router.push("/chat?view=settings&section=profile")
+            }
+          >
+            <Settings className="mr-2 size-4" />
+            Settings
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
@@ -77,10 +150,8 @@ export function SidebarProfile() {
             disabled={loggingOut}
             onClick={handleLogout}
           >
-            <div className="flex items-center gap-2 text-destructive">
-              <LogOut className="size-4" />
-              Log out
-            </div>
+            <LogOut className="mr-2 size-4 text-destructive" />
+            <span className="text-destructive">Log out</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

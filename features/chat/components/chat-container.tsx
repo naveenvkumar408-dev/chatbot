@@ -7,13 +7,15 @@ import { Menu, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sidebar } from "@/components/layout/sidebar";
+import type { ComponentProps } from "react";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
 import { useChat } from "../hooks/use-chat";
 import { useConversations } from "@/features/conversation/hooks/use-conversations";
 import { ProfileCompletionForm } from "@/features/profile/components/profile-completion-form";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, ArrowLeft } from "lucide-react";
 import { useTheme } from "next-themes";
+
 
 interface ChatContainerProps {
     conversationId?: string;
@@ -24,9 +26,20 @@ export function ChatContainer({
 }: ChatContainerProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const isProfileView = searchParams.get("view") === "profile";
+    const isSettingsView = searchParams.get("view") === "settings";
     const { theme, setTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
+
+
+    const settingsSection: SettingsSection =
+        searchParams.get("section") === "appearance"
+            ? "appearance"
+            : "profile";
+
+    function selectSettingsSection(section: SettingsSection) {
+        router.push(`/chat?view=settings&section=${section}`);
+    }
+
 
     useEffect(() => {
         setMounted(true);
@@ -103,6 +116,9 @@ export function ChatContainer({
         sendMessage(content, targetId);
     }
 
+    type SettingsSection = "profile" | "appearance";
+
+
     const sidebarProps = {
         conversations,
         activeConversationId: conversationId ?? activeConversationId,
@@ -110,7 +126,11 @@ export function ChatContainer({
         onSelectConversation: handleSelectConversation,
         onDeleteConversation: handleDeleteConversation,
         onRenameConversation: updateConversationTitle,
+        settingsMode: isSettingsView,
+        activeSettingsSection: settingsSection,
+        onSelectSettingsSection: selectSettingsSection,
     };
+
 
     return (
         <main className="flex h-dvh overflow-hidden bg-background">
@@ -162,9 +182,21 @@ export function ChatContainer({
                             <Menu className="size-5" />
                         </Button>
 
-                        <span className="truncate font-medium">
-                            {isProfileView ? "Your Profile" : conversationTitle}
-                        </span>
+                        {isSettingsView ? (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="-ml-2 gap-2"
+                                onClick={() => router.push("/chat")}
+                            >
+                                <ArrowLeft className="size-4" />
+                                Back to chat
+                            </Button>
+                        ) : (
+                            <span className="truncate font-medium">
+                                {conversationTitle}
+                            </span>
+                        )}
                     </div>
 
                     {/* Far right side */}
@@ -193,9 +225,61 @@ export function ChatContainer({
                 </header>
 
 
-                {isProfileView ? (
+
+                {isSettingsView ? (
                     <div className="min-h-0 flex-1 overflow-y-auto">
-                        <ProfileCompletionForm />
+                        {settingsSection === "profile" ? (
+                            <ProfileCompletionForm />
+                        ) : (
+                            <div className="mx-auto w-full max-w-3xl space-y-6 p-6 sm:p-10">
+                                <div>
+                                    <p className="text-sm text-muted-foreground">
+                                        PERSONALIZATION
+                                    </p>
+                                    <h1 className="mt-2 text-2xl font-semibold">
+                                        Appearance
+                                    </h1>
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                        Customize how AI Chat looks on your device.
+                                    </p>
+                                </div>
+
+                                <div className="rounded-xl border p-5">
+                                    <h2 className="font-medium">Theme</h2>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        Choose your preferred appearance.
+                                    </p>
+
+                                    <div className="mt-4 flex flex-wrap gap-3">
+                                        <Button
+                                            type="button"
+                                            variant={theme === "light" ? "secondary" : "outline"}
+                                            onClick={() => setTheme("light")}
+                                        >
+                                            <Sun className="mr-2 size-4" />
+                                            Light
+                                        </Button>
+
+                                        <Button
+                                            type="button"
+                                            variant={theme === "dark" ? "secondary" : "outline"}
+                                            onClick={() => setTheme("dark")}
+                                        >
+                                            <Moon className="mr-2 size-4" />
+                                            Dark
+                                        </Button>
+
+                                        <Button
+                                            type="button"
+                                            variant={theme === "system" ? "secondary" : "outline"}
+                                            onClick={() => setTheme("system")}
+                                        >
+                                            System
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div className="flex min-h-0 flex-1 flex-col">
@@ -217,10 +301,7 @@ export function ChatContainer({
                             </div>
                         ) : (
                             <div className="min-h-0 flex-1 overflow-y-auto">
-                                <MessageList
-                                    messages={messages}
-                                    isLoading={isLoading}
-                                />
+                                <MessageList messages={messages} isLoading={isLoading} />
                             </div>
                         )}
 
@@ -230,6 +311,7 @@ export function ChatContainer({
                         />
                     </div>
                 )}
+
             </section>
         </main>
     );
