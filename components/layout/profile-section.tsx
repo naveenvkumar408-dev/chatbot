@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   LogOut,
@@ -11,7 +11,9 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { useProfile } from "@/features/profile/hooks/use-profile";
 import { Button } from "@/components/ui/button";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,18 +28,26 @@ interface SidebarProfileProps {
   settingsMode?: boolean;
   activeSettingsSection?: SettingsSection;
   onSelectSettingsSection?: (section: SettingsSection) => void;
+  dropdownCloseKey?: number;
 }
 
 export function SidebarProfile({
   settingsMode = false,
   activeSettingsSection = "profile",
   onSelectSettingsSection,
+  dropdownCloseKey = 0,
 }: SidebarProfileProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { profile } = useProfile();
 
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    setIsDropdownOpen(false);
+  }, [dropdownCloseKey]);
 
   async function handleLogout() {
     if (loggingOut) return;
@@ -56,18 +66,19 @@ export function SidebarProfile({
     }
   }
 
+  const initials =
+    (profile.fullName || user?.name || "")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase() || "U";
+
   if (settingsMode) {
     const items = [
-      {
-        id: "profile" as const,
-        label: "Profile",
-        icon: UserRound,
-      },
-      {
-        id: "appearance" as const,
-        label: "Appearance",
-        icon: Palette,
-      },
+      { id: "profile" as const, label: "Profile", icon: UserRound },
+      { id: "appearance" as const, label: "Appearance", icon: Palette },
     ];
 
     return (
@@ -113,30 +124,49 @@ export function SidebarProfile({
   }
 
   return (
-    <div className="w-full">
-      <DropdownMenu>
+    <div className="w-full min-w-0">
+      <DropdownMenu
+        open={isDropdownOpen}
+        onOpenChange={setIsDropdownOpen}
+      >
         <DropdownMenuTrigger
           type="button"
           disabled={loggingOut}
-          className="flex w-full cursor-pointer items-center gap-3 rounded-xl p-3 text-left hover:bg-accent"
+          className="flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-xl p-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted font-medium">
-            {user?.name?.charAt(0)?.toUpperCase() || "U"}
+          <div className="size-10 shrink-0 overflow-hidden rounded-full border bg-muted">
+            {profile.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.avatarUrl}
+                alt={`${profile.fullName || "User"} profile picture`}
+                className="size-full rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex size-full items-center justify-center text-sm font-medium">
+                {initials}
+              </div>
+            )}
           </div>
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">
-              {user?.name || "My account"}
+              {user?.name || profile.fullName || "My account"}
             </p>
             <p className="truncate text-xs text-muted-foreground">
-              {user?.email || ""}
+              {user?.email || profile.email || ""}
             </p>
           </div>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent side="top" align="start" className="w-56">
+        <DropdownMenuContent
+          side="top"
+          align="start"
+          sideOffset={8}
+          className="w-dropdown min-w-0"
+        >
           <DropdownMenuItem
-            onClick={() =>
+            onSelect={() =>
               router.push("/chat?view=settings&section=profile")
             }
           >
@@ -148,7 +178,7 @@ export function SidebarProfile({
 
           <DropdownMenuItem
             disabled={loggingOut}
-            onClick={handleLogout}
+            onSelect={handleLogout}
           >
             <LogOut className="mr-2 size-4 text-destructive" />
             <span className="text-destructive">Log out</span>
