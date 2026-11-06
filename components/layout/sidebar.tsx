@@ -31,7 +31,10 @@ interface SidebarProps {
   settingsMode?: boolean;
   activeSettingsSection?: SettingsSection;
   onSelectSettingsSection?: (section: SettingsSection) => void;
+  width?: number;
+  dropdownCloseKey?: number;
 }
+
 
 export function Sidebar({
   conversations,
@@ -46,20 +49,24 @@ export function Sidebar({
   settingsMode = false,
   activeSettingsSection = "profile",
   onSelectSettingsSection,
+  width = 288,
+  dropdownCloseKey = 0,
 }: SidebarProps) {
   const isCollapsed = collapsed && !settingsMode;
 
+
   return (
     <aside
-      className={`flex h-full shrink-0 flex-col overflow-hidden border-r bg-muted/40 p-3 transition-[width] duration-200 ease-in-out ${
-        isCollapsed ? "w-[68px]" : "w-72"
-      }`}
+      style={{
+        width: isCollapsed ? 68 : width,
+        backgroundColor: "var(--background)",
+      }}
+      className="relative flex h-full min-w-0 shrink-0 flex-col overflow-hidden border-r border-border p-3 shadow-none"
     >
-      {/* Shared sidebar header */}
+      {/* Sidebar header */}
       <div
-        className={`flex h-11 shrink-0 items-center ${
-          isCollapsed ? "justify-center" : "justify-between px-1"
-        }`}
+        className={`flex h-11 shrink-0 items-center ${isCollapsed ? "justify-center" : "justify-between px-1"
+          }`}
       >
         {isCollapsed ? (
           <div className="group relative flex size-10 items-center justify-center">
@@ -72,7 +79,7 @@ export function Sidebar({
               onClick={onToggle}
               aria-label="Expand sidebar"
               title="Expand sidebar"
-              className="absolute inset-0 size-10 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+              className="absolute inset-0 size-10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
             >
               <PanelLeftOpen className="size-5" />
             </Button>
@@ -105,7 +112,6 @@ export function Sidebar({
       </div>
 
       {settingsMode ? (
-        /* Settings navigation replaces chat navigation */
         <div className="mt-6 flex-1">
           <p className="mb-3 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Settings
@@ -115,15 +121,15 @@ export function Sidebar({
             settingsMode
             activeSettingsSection={activeSettingsSection}
             onSelectSettingsSection={onSelectSettingsSection}
+            dropdownCloseKey={dropdownCloseKey}
           />
         </div>
       ) : (
         <>
           {/* New chat */}
           <div
-            className={`mt-4 shrink-0 ${
-              isCollapsed ? "flex justify-center" : ""
-            }`}
+            className={`mt-4 shrink-0 ${isCollapsed ? "flex justify-center" : ""
+              }`}
           >
             {isCollapsed ? (
               <Button
@@ -141,28 +147,27 @@ export function Sidebar({
             )}
           </div>
 
-          {/* Conversation list */}
+          {/* Conversations */}
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             {isCollapsed ? (
               <div className="flex flex-col items-center gap-2">
-                {conversations.map((conversation) => {
-                  const isActive =
-                    conversation.id === activeConversationId;
-
-                  return (
-                    <Button
-                      key={conversation.id}
-                      type="button"
-                      variant={isActive ? "secondary" : "ghost"}
-                      size="icon"
-                      title={conversation.title}
-                      aria-label={conversation.title}
-                      onClick={() => onSelectConversation(conversation.id)}
-                    >
-                      <MessageSquare className="size-4" />
-                    </Button>
-                  );
-                })}
+                {conversations.map((conversation) => (
+                  <Button
+                    key={conversation.id}
+                    type="button"
+                    variant={
+                      conversation.id === activeConversationId
+                        ? "secondary"
+                        : "ghost"
+                    }
+                    size="icon"
+                    title={conversation.title}
+                    aria-label={conversation.title}
+                    onClick={() => onSelectConversation(conversation.id)}
+                  >
+                    <MessageSquare className="size-4" />
+                  </Button>
+                ))}
               </div>
             ) : (
               <ConversationList
@@ -177,12 +182,12 @@ export function Sidebar({
 
           {/* Account dropdown */}
           <div className="mt-auto shrink-0">
-            <SidebarProfile />
+            <SidebarProfile dropdownCloseKey={dropdownCloseKey} />
           </div>
         </>
       )}
 
-      {/* Mobile close button */}
+      {/* Mobile close */}
       {onClose && (
         <div className="mt-2 shrink-0 md:hidden">
           <Button

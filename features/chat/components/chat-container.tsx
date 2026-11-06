@@ -1,13 +1,13 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Menu, Sparkles } from "lucide-react";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import { Menu, Sparkles, GripVertical } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Sidebar } from "@/components/layout/sidebar";
-import type { ComponentProps } from "react";
+import { Sidebar, type SettingsSection } from "@/components/layout/sidebar";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
 import { useChat } from "../hooks/use-chat";
@@ -75,6 +75,57 @@ export function ChatContainer({
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+    const [sidebarWidth, setSidebarWidth] = useState(288);
+    const [dropdownCloseKey, setDropdownCloseKey] = useState(0);
+
+    const resizeStartRef = useRef<{
+        pointerId: number;
+        startX: number;
+        startWidth: number;
+    } | null>(null);
+
+    function handleResizeStart(event: ReactPointerEvent<HTMLDivElement>) {
+        event.preventDefault();
+
+        resizeStartRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startWidth: sidebarWidth,
+        };
+
+        event.currentTarget.setPointerCapture(event.pointerId);
+
+        // Close the account dropdown before resizing.
+        setDropdownCloseKey((previous) => previous + 1);
+    }
+
+    function handleResizeMove(event: ReactPointerEvent<HTMLDivElement>) {
+        const start = resizeStartRef.current;
+
+        if (!start || start.pointerId !== event.pointerId) return;
+
+        const isMobile = window.innerWidth < 768;
+        const maxWidth = isMobile
+            ? Math.min(480, window.innerWidth * 0.85)
+            : 480;
+
+        const nextWidth = start.startWidth + (event.clientX - start.startX);
+
+        setSidebarWidth(
+            Math.min(maxWidth, Math.max(240, nextWidth)),
+        );
+    }
+
+    function handleResizeEnd(event: ReactPointerEvent<HTMLDivElement>) {
+        if (resizeStartRef.current?.pointerId !== event.pointerId) return;
+
+        resizeStartRef.current = null;
+
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+    }
+
     function handleNewChat() {
         const conversation = createConversation();
 
@@ -129,42 +180,91 @@ export function ChatContainer({
         settingsMode: isSettingsView,
         activeSettingsSection: settingsSection,
         onSelectSettingsSection: selectSettingsSection,
+        width: sidebarWidth,
+        dropdownCloseKey,
     };
 
 
     return (
         <main className="flex h-dvh overflow-hidden bg-background">
-            {/* Desktop sidebar */}
-            <div className="hidden h-full shrink-0 md:block">
+            {/* Desktop resizable sidebar */}
+            <div
+                className="relative hidden h-full shrink-0 md:block"
+                style={{
+                    width: sidebarCollapsed ? 68 : sidebarWidth,
+                }}
+            >
                 <Sidebar
                     {...sidebarProps}
                     collapsed={sidebarCollapsed}
-                    onToggle={() =>
-                        setSidebarCollapsed((previous) => !previous)
-                    }
+                    onToggle={() => {
+                        setDropdownCloseKey((previous) => previous + 1);
+                        setSidebarCollapsed((previous) => !previous);
+                    }}
                 />
+
+                {!sidebarCollapsed && (
+                    <div
+                        role="separator"
+                        aria-label="Resize sidebar"
+                        aria-orientation="vertical"
+                        aria-valuemin={240}
+                        aria-valuemax={480}
+                        aria-valuenow={sidebarWidth}
+                        tabIndex={0}
+                        onPointerDown={handleResizeStart}
+                        onPointerMove={handleResizeMove}
+                        onPointerUp={handleResizeEnd}
+                        onPointerCancel={handleResizeEnd}
+                        onDoubleClick={() => setSidebarWidth(288)}
+                        className="group absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize touch-none items-center justify-center"
+                    >
+                        <div className="h-full w-0.5 bg-transparent transition-colors group-hover:bg-primary/50 group-active:bg-primary" />
+                    </div>
+                )}
             </div>
+
 
             {/* Mobile sidebar overlay */}
             {sidebarOpen && (
-                <div className="fixed inset-0 z-50 flex md:hidden">
-                    <div className="h-full w-72 max-w-[85vw]">
+                <div className="fixed inset-0 z-100 md:hidden">
+                    {/* Blurred background */}
+                    <button
+                        type="button"
+                        aria-label="Close sidebar"
+                        onClick={() => setSidebarOpen(false)}
+                        className="absolute inset-0 size-full cursor-default bg-black/30 backdrop-blur-md"
+                    />
+
+                    {/* Sidebar panel */}
+                    <div
+                        className="absolute inset-y-0 left-0 z-10 h-dvh max-w-[85vw] shadow-2xl"
+                        style={{
+                            width: `min(${sidebarWidth}px, 85vw)`,
+                        }}
+                    >
                         <Sidebar
                             {...sidebarProps}
                             collapsed={false}
                             onToggle={() => setSidebarOpen(false)}
                             onClose={() => setSidebarOpen(false)}
                         />
-                    </div>
 
-                    <button
-                        type="button"
-                        aria-label="Close sidebar"
-                        className="flex-1 bg-black/40"
-                        onClick={() => setSidebarOpen(false)}
-                    />
+                        {/* Resize handle */}
+                        <div
+                            role="separator"
+                            aria-label="Resize sidebar"
+                            aria-orientation="vertical"
+                            onPointerDown={handleResizeStart}
+                            onPointerMove={handleResizeMove}
+                            onPointerUp={handleResizeEnd}
+                            onPointerCancel={handleResizeEnd}
+                            className="absolute -right-1 top-0 z-20 h-full w-2 cursor-col-resize touch-none"
+                        />
+                    </div>
                 </div>
             )}
+
 
             {/* Main panel: shared header and switchable content */}
             <section className="flex min-w-0 flex-1 flex-col">
