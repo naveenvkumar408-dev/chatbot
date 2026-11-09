@@ -7,7 +7,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { Menu, Sparkles, GripVertical } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Sidebar, type SettingsSection } from "@/components/layout/sidebar";
+import { Sidebar } from "@/components/layout/sidebar";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
 import { useChat } from "../hooks/use-chat";

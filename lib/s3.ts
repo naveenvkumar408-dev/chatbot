@@ -37,7 +37,7 @@ export const S3_BUCKET = bucket;
 const baseFolder = (folder || "profile-images").replace(/^\/+|\/+$/g, "");
 
 export function createProfileImageKey(userId: string, extension: string) {
-  return `${baseFolder}/${userId}/${crypto.randomUUID()}.${extension}`;
+  return `${baseFolder}/${userId}.${extension}`;
 }
 
 export async function getProfileImageUrl(key: string) {

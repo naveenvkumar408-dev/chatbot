@@ -7,7 +7,10 @@ export async function GET() {
     const { data, error } = await auth.getSession();
 
     if (error || !data?.session || !data?.user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json(
+        { error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
     const userId = data.user.id;
@@ -17,7 +20,6 @@ export async function GET() {
         u.id,
         u.name,
         u.email,
-        u.image,
         p.bio,
         p.image_key AS "imageKey"
       FROM neon_auth."user" AS u
@@ -28,29 +30,45 @@ export async function GET() {
     `;
 
     if (rows.length === 0) {
-      return Response.json({ error: "User not found" }, { status: 404 });
+      return Response.json(
+        { error: "User not found" },
+        { status: 404 },
+      );
     }
 
     const profile = rows[0];
 
-    const imageKey = (profile.imageKey as string | null) ?? null;
+    const imageKey =
+      (profile.imageKey as string | null) ?? null;
 
+    // Only show a picture uploaded to your profile storage.
+    // Do not fall back to neon_auth.user.image.
     const imageUrl = imageKey
       ? await getProfileImageUrl(imageKey)
-      : ((profile.image as string | null) ?? null);
+      : null;
 
-    return Response.json({
-      id: profile.id,
-      name: profile.name,
-      email: profile.email,
-      bio: profile.bio ?? "",
-      imageKey,
-      imageUrl,
-    });
+    return Response.json(
+      {
+        id: profile.id,
+        name: profile.name,
+        email: profile.email,
+        bio: profile.bio ?? "",
+        imageKey,
+        imageUrl,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      },
+    );
   } catch (error) {
     console.error("GET /api/profile error:", error);
 
-    return Response.json({ error: "Failed to fetch profile" }, { status: 500 });
+    return Response.json(
+      { error: "Failed to fetch profile" },
+      { status: 500 },
+    );
   }
 }
 
@@ -59,7 +77,10 @@ export async function PATCH(request: Request) {
     const { data, error } = await auth.getSession();
 
     if (error || !data?.session || !data?.user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json(
+        { error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
     let body: unknown;
@@ -67,10 +88,17 @@ export async function PATCH(request: Request) {
     try {
       body = await request.json();
     } catch {
-      return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+      return Response.json(
+        { error: "Invalid JSON body" },
+        { status: 400 },
+      );
     }
 
-    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body)
+    ) {
       return Response.json(
         { error: "Request body must be an object" },
         { status: 400 },
@@ -78,6 +106,7 @@ export async function PATCH(request: Request) {
     }
 
     const input = body as Record<string, unknown>;
+
     const updateName = Object.hasOwn(input, "name");
     const updateBio = Object.hasOwn(input, "bio");
 
@@ -107,7 +136,10 @@ export async function PATCH(request: Request) {
     }
 
     if (updateBio) {
-      if (typeof input.bio !== "string" || input.bio.length > 500) {
+      if (
+        typeof input.bio !== "string" ||
+        input.bio.length > 500
+      ) {
         return Response.json(
           { error: "Bio must be a string of at most 500 characters" },
           { status: 400 },

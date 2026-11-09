@@ -44,10 +44,15 @@ export function SidebarProfile({
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
 
   useEffect(() => {
     setIsDropdownOpen(false);
   }, [dropdownCloseKey]);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [profile.avatarUrl]);
 
   async function handleLogout() {
     if (loggingOut) return;
@@ -67,13 +72,10 @@ export function SidebarProfile({
   }
 
   const initials =
-    (profile.fullName || user?.name || "")
+    (profile.fullName || user?.name || "U")
       .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase() || "U";
+      .charAt(0)
+      .toUpperCase();
 
   if (settingsMode) {
     const items = [
@@ -134,20 +136,20 @@ export function SidebarProfile({
           disabled={loggingOut}
           className="flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-xl p-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <div className="size-10 shrink-0 overflow-hidden rounded-full border bg-muted">
-            {profile.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
+
+          <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-sm font-semibold">
+            {profile.avatarUrl && !avatarError ? (
               <img
                 src={profile.avatarUrl}
-                alt={`${profile.fullName || "User"} profile picture`}
+                alt=""
+                onError={() => setAvatarError(true)}
                 className="size-full rounded-full object-cover"
               />
             ) : (
-              <div className="flex size-full items-center justify-center text-sm font-medium">
-                {initials}
-              </div>
+              <span>{initials}</span>
             )}
           </div>
+
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">
