@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+
 import {
   DEFAULT_PROFILE,
   type UserProfile,
@@ -13,10 +14,17 @@ type ApiProfile = {
   bio: string | null;
   imageKey: string | null;
   imageUrl?: string | null;
-  image?: string | null;
 };
 
-async function readResponse(response: Response): Promise<unknown> {
+type ImageApiResponse = {
+  message?: string;
+  imageKey: string | null;
+  imageUrl: string | null;
+};
+
+const PROFILE_UPDATED_EVENT = "profile-updated";
+
+async function readResponse<T>(response: Response): Promise<T> {
   const data: unknown = await response.json().catch(() => ({}));
 
   if (!response.ok) {
@@ -31,7 +39,7 @@ async function readResponse(response: Response): Promise<unknown> {
     throw new Error(message);
   }
 
-  return data;
+  return data as T;
 }
 
 function mapProfile(data: ApiProfile): UserProfile {
@@ -41,19 +49,58 @@ function mapProfile(data: ApiProfile): UserProfile {
     email: data.email ?? "",
     bio: data.bio ?? "",
     imageKey: data.imageKey ?? null,
-    avatarUrl: data.imageUrl ?? data.image ?? "",
+    avatarUrl: data.imageUrl ?? "",
   };
+}
+
+/**
+ * Broadcast a profile update to every mounted useProfile() instance.
+ */
+function publishProfileUpdate(profile: UserProfile) {
+  window.dispatchEvent(
+    new CustomEvent<UserProfile>(PROFILE_UPDATED_EVENT, {
+      detail: profile,
+    }),
+  );
 }
 
 export function useProfile() {
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
-
   const [isLoaded, setIsLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
 
+  /**
+   * Listen for profile changes from other components.
+   * This synchronizes SidebarProfile and ProfileCompletionForm.
+   */
+  useEffect(() => {
+    function handleProfileUpdated(event: Event) {
+      const customEvent = event as CustomEvent<UserProfile>;
+
+      if (customEvent.detail) {
+        setProfile(customEvent.detail);
+      }
+    }
+
+    window.addEventListener(
+      PROFILE_UPDATED_EVENT,
+      handleProfileUpdated,
+    );
+
+    return () => {
+      window.removeEventListener(
+        PROFILE_UPDATED_EVENT,
+        handleProfileUpdated,
+      );
+    };
+  }, []);
+
+  /**
+   * Fetch the latest profile from the server.
+   */
   const reloadProfile = useCallback(async () => {
     const response = await fetch("/api/profile", {
       method: "GET",
@@ -61,53 +108,63 @@ export function useProfile() {
       cache: "no-store",
     });
 
-    const data = (await readResponse(response)) as ApiProfile;
-    setProfile(mapProfile(data));
+    const data = await readResponse<ApiProfile>(response);
+    const updatedProfile = mapProfile(data);
+
+    setProfile(updatedProfile);
+    publishProfileUpdate(updatedProfile);
+
+    return updatedProfile;
   }, []);
 
-  // Load the profile once when the hook mounts.
+  /**
+   * Load profile when the hook mounts.
+   */
   useEffect(() => {
-  let active = true;
+    let active = true;
 
-  async function load() {
-    try {
-      setLoading(true);
-      setError("");
+    async function loadProfile() {
+      try {
+        setLoading(true);
+        setError("");
 
-      const response = await fetch("/api/profile", {
-        method: "GET",
-        credentials: "same-origin",
-        cache: "no-store",
-      });
+        const response = await fetch("/api/profile", {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+        });
 
-      const data = (await readResponse(response)) as ApiProfile;
+        const data = await readResponse<ApiProfile>(response);
 
-      if (active) {
-        setProfile(mapProfile(data));
-      }
-    } catch (err) {
-      if (active) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Could not load profile."
-        );
-      }
-    } finally {
-      if (active) {
-        setLoading(false); // Important: false
-        setIsLoaded(true);
+        if (active) {
+          setProfile(mapProfile(data));
+        }
+      } catch (err) {
+        if (active) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Could not load profile.",
+          );
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+          setIsLoaded(true);
+        }
       }
     }
-  }
 
-  void load();
+    void loadProfile();
 
-  return () => {
-    active = false;
-  };
-}, []);
+    return () => {
+      active = false;
+    };
+  }, []);
 
+  /**
+   * Save name and bio.
+   */
   const saveProfile = useCallback(
     async (values: { fullName: string; bio: string }) => {
       setIsSaving(true);
@@ -126,13 +183,17 @@ export function useProfile() {
           }),
         });
 
-        await readResponse(response);
+        await readResponse<{ message: string }>(response);
+
+        // Reload and broadcast the updated name/bio to all components.
         await reloadProfile();
 
         return true;
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Could not save profile.",
+          err instanceof Error
+            ? err.message
+            : "Could not save profile.",
         );
 
         return false;
@@ -143,8 +204,11 @@ export function useProfile() {
     [reloadProfile],
   );
 
+  /**
+   * Upload an avatar and immediately update every component.
+   */
   const uploadAvatar = useCallback(
-    async (file: File) => {
+    async (file: File): Promise<boolean> => {
       setIsUploading(true);
       setError("");
 
@@ -158,13 +222,27 @@ export function useProfile() {
           body: formData,
         });
 
-        await readResponse(response);
-        await reloadProfile();
+        const result =
+          await readResponse<ImageApiResponse>(response);
+
+        // Update the current profile immediately.
+        const updatedProfile: UserProfile = {
+          ...profile,
+          imageKey: result.imageKey,
+          avatarUrl: result.imageUrl ?? "",
+        };
+
+        setProfile(updatedProfile);
+
+        // Update SidebarProfile and every other useProfile() instance.
+        publishProfileUpdate(updatedProfile);
 
         return true;
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Could not upload image.",
+          err instanceof Error
+            ? err.message
+            : "Could not upload image.",
         );
 
         return false;
@@ -172,9 +250,12 @@ export function useProfile() {
         setIsUploading(false);
       }
     },
-    [reloadProfile],
+    [profile],
   );
 
+  /**
+   * Remove the avatar and immediately show the user's initials.
+   */
   const removeAvatar = useCallback(async () => {
     setIsUploading(true);
     setError("");
@@ -185,18 +266,31 @@ export function useProfile() {
         credentials: "same-origin",
       });
 
-      await readResponse(response);
-      await reloadProfile();
+      const result =
+        await readResponse<ImageApiResponse>(response);
+
+      const updatedProfile: UserProfile = {
+        ...profile,
+        imageKey: result.imageKey,
+        avatarUrl: result.imageUrl ?? "",
+      };
+
+      setProfile(updatedProfile);
+      publishProfileUpdate(updatedProfile);
 
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not remove image.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not remove image.",
+      );
 
       return false;
     } finally {
       setIsUploading(false);
     }
-  }, [reloadProfile]);
+  }, [profile]);
 
   return {
     profile,
