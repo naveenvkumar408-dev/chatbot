@@ -1,165 +1,214 @@
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
 import type { Conversation } from "@/features/conversation/types/conversation.types";
 
-const STORAGE_KEY = "chatgpt-clone-conversations-v1";
+async function readResponse<T>(response: Response): Promise<T> {
+  const data: unknown = await response.json().catch(() => ({}));
 
-const DEFAULT_CONVERSATIONS: Conversation[] = [
-    {
-        id: "demo-1",
-        title: "Welcome to your chat",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-    },
-    {
-        id: "demo-2",
-        title: "Explore AI",
-        updatedAt: "2026-01-02T00:00:00.000Z",
-    },
-];
+  if (!response.ok) {
+    const message =
+      data &&
+      typeof data === "object" &&
+      "error" in data &&
+      typeof data.error === "string"
+        ? data.error
+        : "Something went wrong. Please try again.";
+
+    throw new Error(message);
+  }
+
+  return data as T;
+}
 
 export function useConversations(initialId?: string) {
-    const [conversations, setConversations] =
-        useState<Conversation[]>([]);
-    const [activeConversationId, setActiveConversationId] =
-        useState<string | null>(initialId ?? null);
-    const [isLoaded, setIsLoaded] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(initialId ?? null);
 
-    // Load saved conversations in the browser.
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem(STORAGE_KEY);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState("");
 
-            if (saved) {
-                const parsed: unknown = JSON.parse(saved);
+  // Load conversations from Neon through the API.
+  const loadConversations = useCallback(async () => {
+    setError("");
 
-                if (Array.isArray(parsed)) {
-                    setConversations(parsed as Conversation[]);
-                } else {
-                    setConversations(DEFAULT_CONVERSATIONS);
-                }
-            } else {
-                setConversations(DEFAULT_CONVERSATIONS);
-            }
-        } catch (error) {
-            console.error("Could not load conversations:", error);
-            setConversations(DEFAULT_CONVERSATIONS);
-        } finally {
-            setIsLoaded(true);
-        }
-    }, []);
+    try {
+      const response = await fetch("/api/conversations", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
 
-    // Ensure a directly opened conversation URL exists in the sidebar.
-    useEffect(() => {
-        if (!isLoaded) return;
+      const data = await readResponse<{
+        conversations: Conversation[];
+      }>(response);
 
-        if (!initialId) {
-            setActiveConversationId(null);
-            return;
-        }
-
-        setActiveConversationId(initialId);
-
-        setConversations((previous) => {
-            if (previous.some((item) => item.id === initialId)) {
-                return previous;
-            }
-
-            return [
-                {
-                    id: initialId,
-                    title: "New chat",
-                    updatedAt: new Date().toISOString(),
-                },
-                ...previous,
-            ];
-        });
-    }, [initialId, isLoaded]);
-
-    // Save after the initial browser load.
-    useEffect(() => {
-        if (!isLoaded) return;
-
-        try {
-            localStorage.setItem(
-                STORAGE_KEY,
-                JSON.stringify(conversations)
-            );
-        } catch (error) {
-            console.error("Could not save conversations:", error);
-        }
-    }, [conversations, isLoaded]);
-
-    function createConversation(): Conversation {
-        const conversation: Conversation = {
-            id: crypto.randomUUID(),
-            title: "New chat",
-            updatedAt: new Date().toISOString(),
-        };
-
-        setConversations((previous) => [
-            conversation,
-            ...previous,
-        ]);
-        setActiveConversationId(conversation.id);
-
-        return conversation;
+      setConversations(data.conversations);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not load conversations.",
+      );
+    } finally {
+      setIsLoaded(true);
     }
+  }, []);
 
-    function selectConversation(id: string) {
-        setActiveConversationId(id);
-    }
+  useEffect(() => {
+    void loadConversations();
+  }, [loadConversations]);
 
-    function deleteConversation(id: string) {
+  // Keep the selected conversation synchronized with the URL.
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    setActiveConversationId(initialId ?? null);
+  }, [initialId, isLoaded]);
+
+  // Create a conversation in the database.
+  const createConversation = useCallback(async (): Promise<Conversation> => {
+    setError("");
+
+    const response = await fetch("/api/conversations", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: "New chat",
+      }),
+    });
+
+    const data = await readResponse<{
+      conversation: Conversation;
+    }>(response);
+
+    const conversation = data.conversation;
+
+    setConversations((previous) => [
+      conversation,
+      ...previous.filter((item) => item.id !== conversation.id),
+    ]);
+
+    setActiveConversationId(conversation.id);
+
+    return conversation;
+  }, []);
+
+  // Select an existing conversation.
+  const selectConversation = useCallback((id: string) => {
+    setActiveConversationId(id);
+  }, []);
+
+  // Rename a conversation in the database.
+  const updateConversationTitle = useCallback(
+    async (id: string, newTitle: string): Promise<boolean> => {
+      const title = newTitle.trim();
+
+      if (!title || title.length > 255) {
+        setError("Title must be between 1 and 255 characters.");
+        return false;
+      }
+
+      setError("");
+
+      try {
+        const response = await fetch(
+          `/api/conversations/${encodeURIComponent(id)}`,
+          {
+            method: "PATCH",
+            credentials: "same-origin",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ title }),
+          },
+        );
+
+        const data = await readResponse<{
+          conversation: Conversation;
+        }>(response);
+
+        const updatedConversation = data.conversation;
+
         setConversations((previous) =>
-            previous.filter((item) => item.id !== id)
+          previous
+            .map((item) =>
+              item.id === id ? updatedConversation : item,
+            )
+            .sort(
+              (a, b) =>
+                new Date(b.updatedAt).getTime() -
+                new Date(a.updatedAt).getTime(),
+            ),
+        );
+
+        return true;
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not rename conversation.",
+        );
+
+        return false;
+      }
+    },
+    [],
+  );
+
+  // Delete a conversation from the database.
+  const deleteConversation = useCallback(
+    async (id: string): Promise<boolean> => {
+      setError("");
+
+      try {
+        const response = await fetch(
+          `/api/conversations/${encodeURIComponent(id)}`,
+          {
+            method: "DELETE",
+            credentials: "same-origin",
+          },
+        );
+
+        await readResponse<{ message: string }>(response);
+
+        setConversations((previous) =>
+          previous.filter((item) => item.id !== id),
         );
 
         setActiveConversationId((current) =>
-            current === id ? null : current
+          current === id ? null : current,
         );
-    }
 
-    function updateConversationTitle(
-        id: string,
-        message: string
-    ) {
-        const title =
-            message.trim().replace(/\s+/g, " ").slice(0, 40) ||
-            "New chat";
-
-        setConversations((previous) =>
-            previous.map((item) =>
-                item.id === id
-                    ? {
-                        ...item,
-                        title,
-                        updatedAt: new Date().toISOString(),
-                    }
-                    : item
-            )
+        return true;
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not delete conversation.",
         );
-    }
 
-    function touchConversation(id: string) {
-        setConversations((previous) =>
-            previous.map((item) =>
-                item.id === id
-                    ? { ...item, updatedAt: new Date().toISOString() }
-                    : item
-            )
-        );
-    }
+        return false;
+      }
+    },
+    [],
+  );
 
-    return {
-        conversations,
-        activeConversationId,
-        isLoaded,
-        createConversation,
-        selectConversation,
-        deleteConversation,
-        updateConversationTitle,
-        touchConversation,
-    };
+  return {
+    conversations,
+    activeConversationId,
+    isLoaded,
+    error,
+    loadConversations,
+    createConversation,
+    selectConversation,
+    deleteConversation,
+    updateConversationTitle,
+  };
 }

@@ -48,12 +48,22 @@ export function ChatContainer({
     const {
         conversations,
         activeConversationId,
+        isLoaded: conversationsLoaded,
+        error: conversationError,
         createConversation,
         selectConversation,
         deleteConversation,
         updateConversationTitle,
-        touchConversation,
     } = useConversations(conversationId);
+
+    useEffect(() => {
+        if (conversationError) {
+            console.error(
+                "[ChatContainer] Conversation loading error:",
+                conversationError
+            );
+        }
+    }, [conversationError]);
 
     // A dedicated route always uses its own UUID.
     const chatId =
@@ -65,6 +75,22 @@ export function ChatContainer({
         isLoaded: messagesLoaded,
         sendMessage,
     } = useChat(chatId);
+
+    useEffect(() => {
+        console.log("[ChatContainer] Conversation state:", {
+            conversationId: chatId,
+            conversations,
+            activeConversationId,
+            conversationsLoaded,
+            conversationError,
+        });
+    }, [
+        chatId,
+        conversations,
+        activeConversationId,
+        conversationsLoaded,
+        conversationError,
+    ]);
 
     const activeConversation = conversations.find(
         (conversation) => conversation.id === chatId
@@ -126,11 +152,17 @@ export function ChatContainer({
         }
     }
 
-    function handleNewChat() {
-        const conversation = createConversation();
+    async function handleNewChat() {
+        if (!conversationsLoaded) return;
 
-        router.push(`/chat/${conversation.id}`);
-        setSidebarOpen(false);
+        try {
+            const conversation = await createConversation();
+
+            router.push(`/chat/${conversation.id}`);
+            setSidebarOpen(false);
+        } catch (error) {
+            console.error("Could not create conversation:", error);
+        }
     }
 
     function handleSelectConversation(id: string) {
@@ -139,32 +171,57 @@ export function ChatContainer({
         setSidebarOpen(false);
     }
 
-    function handleDeleteConversation(id: string) {
-        deleteConversation(id);
+    async function handleDeleteConversation(id: string) {
+        try {
+            const success = await deleteConversation(id);
 
-        if (id === (conversationId ?? activeConversationId)) {
-            router.push("/chat");
+            if (!success) {
+                console.error(
+                    "[ChatContainer] Conversation deletion failed:",
+                    id
+                );
+                return;
+            }
+
+            if (id === (conversationId ?? activeConversationId)) {
+                router.push("/chat");
+            }
+        } catch (error) {
+            console.error(
+                "[ChatContainer] Could not delete conversation:",
+                error
+            );
         }
     }
 
-    function handleSendMessage(content: string) {
-        if (!messagesLoaded || isLoading) return;
+    async function handleSendMessage(content: string) {
+        if (!conversationsLoaded || !messagesLoaded || isLoading) return;
 
-        let targetId = conversationId ?? activeConversationId;
+        try {
+            let targetId = conversationId ?? activeConversationId;
 
-        if (!targetId) {
-            const conversation = createConversation();
-            targetId = conversation.id;
+            // Create a database conversation if this is the first message.
+            if (!targetId) {
+                const conversation = await createConversation();
 
-            router.push(`/chat/${targetId}`);
+                targetId = conversation.id;
+
+                router.push(`/chat/${targetId}`);
+            }
+
+            // Automatically title the conversation using its first message.
+            if (messages.length === 0) {
+                const title = content.trim().replace(/\s+/g, " ").slice(0, 40);
+
+                if (title) {
+                    void updateConversationTitle(targetId, title);
+                }
+            }
+
+            sendMessage(content, targetId);
+        } catch (error) {
+            console.error("Could not send message:", error);
         }
-
-        if (messages.length === 0) {
-            updateConversationTitle(targetId, content);
-        }
-
-        touchConversation(targetId);
-        sendMessage(content, targetId);
     }
 
     type SettingsSection = "profile" | "appearance";
