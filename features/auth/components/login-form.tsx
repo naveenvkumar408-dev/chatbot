@@ -2,41 +2,55 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "../hooks/use-auth";
 import { PasswordInput } from "@/components/shared/password-input";
+import { LoadingSpinner } from "@/components/shared/loading-spinner";
+
+import { useAuth } from "../hooks/use-auth";
 import { getLoginErrorMessage } from "@/lib/auth/auth-errors";
 
 export function LoginForm() {
     const router = useRouter();
-    const { login, isLoading } = useAuth();
+    const { login } = useAuth();
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-
     const [errorMessage, setErrorMessage] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+
+    async function handleLogin(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
+
+        if (isSubmitting) return;
+
         setErrorMessage("");
+        setIsSubmitting(true);
 
         try {
-            const result = await login({ email, password });
+            const result = await login({
+                email: email.trim(),
+                password,
+            });
 
             if (!result.success) {
                 setErrorMessage(getLoginErrorMessage(result.error));
                 return;
             }
 
-            router.replace("/chat");
-            router.refresh();
+            // Reload the application with the newly established session.
+            window.location.replace("/chat");
         } catch (error: unknown) {
+            console.error("Login error:", error);
             setErrorMessage(getLoginErrorMessage(error));
+        } finally {
+            setIsSubmitting(false);
         }
     }
+
 
     return (
         <div className="w-full max-w-md space-y-6">
@@ -52,28 +66,25 @@ export function LoginForm() {
 
             <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
-                    <label
-                        htmlFor="email"
-                        className="text-sm font-medium"
-                    >
+                    <label htmlFor="email" className="text-sm font-medium">
                         Email
                     </label>
 
                     <Input
                         id="email"
+                        name="email"
                         type="email"
                         placeholder="Enter your email id"
+                        autoComplete="email"
                         value={email}
                         onChange={(event) => setEmail(event.target.value)}
                         required
+                        disabled={isSubmitting}
                     />
                 </div>
 
                 <div className="space-y-2">
-                    <label
-                        htmlFor="password"
-                        className="text-sm font-medium"
-                    >
+                    <label htmlFor="password" className="text-sm font-medium">
                         Password
                     </label>
 
@@ -85,6 +96,7 @@ export function LoginForm() {
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
                         required
+                        disabled={isSubmitting}
                     />
                 </div>
 
@@ -98,10 +110,15 @@ export function LoginForm() {
                     type="submit"
                     variant="default"
                     className="w-full bg-black text-white hover:cursor-pointer hover:bg-black/80"
-                    disabled={isLoading}
+                    disabled={isSubmitting}
                 >
-                    {isLoading ? "Logging in..." : "Log in"}
+                    {isSubmitting ? (
+                        <LoadingSpinner text="Logging in..." compact />
+                    ) : (
+                        "Log in"
+                    )}
                 </Button>
+
             </form>
 
             <p className="text-center text-sm text-muted-foreground">
