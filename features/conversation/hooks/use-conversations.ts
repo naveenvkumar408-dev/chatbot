@@ -38,7 +38,7 @@ export function useConversations(initialId?: string) {
     try {
       const response = await fetch("/api/conversations", {
         method: "GET",
-        credentials: "same-origin",
+        credentials: "include",
         cache: "no-store",
       });
 
@@ -75,7 +75,7 @@ export function useConversations(initialId?: string) {
 
     const response = await fetch("/api/conversations", {
       method: "POST",
-      credentials: "same-origin",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
       },
@@ -122,7 +122,7 @@ export function useConversations(initialId?: string) {
           `/api/conversations/${encodeURIComponent(id)}`,
           {
             method: "PATCH",
-            credentials: "same-origin",
+            credentials: "include",
             headers: {
               "Content-Type": "application/json",
             },
@@ -172,7 +172,7 @@ export function useConversations(initialId?: string) {
           `/api/conversations/${encodeURIComponent(id)}`,
           {
             method: "DELETE",
-            credentials: "same-origin",
+            credentials: "include",
           },
         );
 
