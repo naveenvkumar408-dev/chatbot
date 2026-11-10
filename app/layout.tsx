@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Figtree } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthRedirect } from "@/features/auth/components/auth-redirect";
 
 const figtree = Figtree({subsets:['latin'],variable:'--font-sans'});
 
@@ -47,6 +48,7 @@ export default function RootLayout({
         >
           {children}
         </ThemeProvider>
+         <AuthRedirect />
       </body>
     </html>
   );
