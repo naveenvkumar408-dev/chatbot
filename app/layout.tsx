@@ -1,21 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Figtree } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthRedirect } from "@/features/auth/components/auth-redirect";
-
-const figtree = Figtree({subsets:['latin'],variable:'--font-sans'});
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -33,10 +21,7 @@ export default function RootLayout({
       className={cn(
         "h-full",
         "antialiased",
-        geistSans.variable,
-        geistMono.variable,
-        "font-sans",
-        figtree.variable
+        "font-sans"
       )}
     >
       <body className="min-h-full flex flex-col">
@@ -48,7 +33,9 @@ export default function RootLayout({
         >
           {children}
         </ThemeProvider>
-         <AuthRedirect />
+        <Suspense fallback={null}>
+          <AuthRedirect />
+        </Suspense>
       </body>
     </html>
   );
