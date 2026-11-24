@@ -1,129 +1,150 @@
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ChatMessage } from "@/features/chat/types/chat.types";
 
-const STORAGE_KEY = "chatgpt-clone-messages-v1";
+async function readResponse<T>(response: Response): Promise<T> {
+  const data: unknown = await response.json().catch(() => ({}));
 
-type MessagesByConversation = Record<string, ChatMessage[]>;
+  if (!response.ok) {
+    const message =
+      data &&
+      typeof data === "object" &&
+      "error" in data &&
+      typeof data.error === "string"
+        ? data.error
+        : "Something went wrong. Please try again.";
+
+    throw new Error(message);
+  }
+
+  return data as T;
+}
 
 export function useChat(conversationId: string) {
-    const [messagesByConversation, setMessagesByConversation] =
-        useState<MessagesByConversation>({});
-    const [loadingIds, setLoadingIds] = useState<string[]>([]);
-    const [isLoaded, setIsLoaded] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState("");
 
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem(STORAGE_KEY);
+  useEffect(() => {
+    let cancelled = false;
 
-            if (saved) {
-                const parsed: unknown = JSON.parse(saved);
+    async function load() {
+      setError("");
 
-                if (
-                    parsed !== null &&
-                    typeof parsed === "object" &&
-                    !Array.isArray(parsed)
-                ) {
-                    setMessagesByConversation(
-                        parsed as MessagesByConversation
-                    );
-                }
-            }
-        } catch (error) {
-            console.error("Failed to load messages:", error);
-        } finally {
-            setIsLoaded(true);
-        }
-    }, []);
+      if (!/^[1-9]\d*$/.test(conversationId)) {
+        setMessages([]);
+        setIsLoaded(true);
+        return;
+      }
 
-    useEffect(() => {
-        if (!isLoaded) return;
+      setIsLoaded(false);
 
-        try {
-            localStorage.setItem(
-                STORAGE_KEY,
-                JSON.stringify(messagesByConversation)
-            );
-        } catch (error) {
-            console.error("Failed to save messages:", error);
-        }
-    }, [messagesByConversation, isLoaded]);
-
-    const messages = messagesByConversation[conversationId] ?? [];
-    const isLoading = loadingIds.includes(conversationId);
-
-    function sendMessage(
-        content: string,
-        targetId: string = conversationId
-    ) {
-        const text = content.trim();
-
-        if (
-            !text ||
-            !targetId ||
-            !isLoaded ||
-            loadingIds.includes(targetId)
-        ) {
-            return;
-        }
-
-        const userMessage: ChatMessage = {
-            id: crypto.randomUUID(),
-            role: "user",
-            content: text,
-            createdAt: new Date().toISOString(),
-        };
-
-        setMessagesByConversation((previous) => ({
-            ...previous,
-            [targetId]: [
-                ...(previous[targetId] ?? []),
-                userMessage,
-            ],
-        }));
-
-        setLoadingIds((previous) =>
-            previous.includes(targetId)
-                ? previous
-                : [...previous, targetId]
+      try {
+        const response = await fetch(
+          `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+          {
+            method: "GET",
+            credentials: "same-origin",
+            cache: "no-store",
+          },
         );
 
-        window.setTimeout(() => {
-            const assistantMessage: ChatMessage = {
-                id: crypto.randomUUID(),
-                role: "assistant",
-                content: `You said: ${text}`,
-                createdAt: new Date().toISOString(),
-            };
+        const data = await readResponse<{
+          messages: ChatMessage[];
+        }>(response);
 
-            setMessagesByConversation((previous) => ({
-                ...previous,
-                [targetId]: [
-                    ...(previous[targetId] ?? []),
-                    assistantMessage,
-                ],
-            }));
-
-            setLoadingIds((previous) =>
-                previous.filter((id) => id !== targetId)
-            );
-        }, 800);
+        if (!cancelled) {
+          setMessages(data.messages);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Could not load messages.",
+          );
+          setMessages([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoaded(true);
+        }
+      }
     }
 
-    function clearMessages() {
-        setMessagesByConversation((previous) => ({
-            ...previous,
-            [conversationId]: [],
-        }));
-    }
+    void load();
 
-    return {
-        messages,
-        isLoading,
-        isLoaded,
-        sendMessage,
-        clearMessages,
+    return () => {
+      cancelled = true;
     };
+  }, [conversationId]);
+
+  const sendMessage = useCallback(
+    async (
+      content: string,
+      targetId: string = conversationId,
+    ) => {
+      const text = content.trim();
+
+      if (!text || !/^[1-9]\d*$/.test(targetId) || isLoading) {
+        return;
+      }
+
+      const tempId = `temp-${Date.now()}`;
+      const optimisticMessage: ChatMessage = {
+        id: tempId,
+        role: "user",
+        content: text,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Immediately show the user's message so MessageList + TypingIndicator render right away
+      setMessages((previous) => [...previous, optimisticMessage]);
+      setIsLoading(true);
+      setError("");
+
+      try {
+        const response = await fetch(
+          `/api/conversations/${encodeURIComponent(targetId)}/messages`,
+          {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              content: text,
+            }),
+          },
+        );
+
+        const data = await readResponse<{
+          messages: ChatMessage[];
+        }>(response);
+
+        setMessages(data.messages);
+      } catch (err) {
+        // Remove the optimistic message if the request failed
+        setMessages((previous) =>
+          previous.filter((msg) => msg.id !== tempId),
+        );
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not send your message.",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [conversationId, isLoading],
+  );
+
+  return {
+    messages,
+    isLoading,
+    isLoaded,
+    error,
+    sendMessage,
+  };
 }

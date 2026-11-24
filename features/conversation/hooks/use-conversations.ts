@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { Conversation } from "@/features/conversation/types/conversation.types";
 
+// Keeps the sidebar populated while switching between /chat/[conversationId] routes.
+let cachedConversations: Conversation[] | null = null;
+
 async function readResponse<T>(response: Response): Promise<T> {
   const data: unknown = await response.json().catch(() => ({}));
 
@@ -23,13 +26,33 @@ async function readResponse<T>(response: Response): Promise<T> {
 }
 
 export function useConversations(initialId?: string) {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>(
+    () => cachedConversations ?? [],
+  );
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(initialId ?? null);
 
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(
+    () => cachedConversations !== null,
+  );
   const [error, setError] = useState("");
+
+  const updateConversations = useCallback(
+    (
+      updater:
+        | Conversation[]
+        | ((previous: Conversation[]) => Conversation[]),
+    ) => {
+      setConversations((previous) => {
+        const next =
+          typeof updater === "function" ? updater(previous) : updater;
+        cachedConversations = next;
+        return next;
+      });
+    },
+    [],
+  );
 
   // Load conversations from Neon through the API.
   const loadConversations = useCallback(async () => {
@@ -46,7 +69,7 @@ export function useConversations(initialId?: string) {
         conversations: Conversation[];
       }>(response);
 
-      setConversations(data.conversations);
+      updateConversations(data.conversations);
     } catch (err) {
       setError(
         err instanceof Error
@@ -56,7 +79,7 @@ export function useConversations(initialId?: string) {
     } finally {
       setIsLoaded(true);
     }
-  }, []);
+  }, [updateConversations]);
 
   useEffect(() => {
     void loadConversations();
@@ -64,10 +87,8 @@ export function useConversations(initialId?: string) {
 
   // Keep the selected conversation synchronized with the URL.
   useEffect(() => {
-    if (!isLoaded) return;
-
     setActiveConversationId(initialId ?? null);
-  }, [initialId, isLoaded]);
+  }, [initialId]);
 
   // Create a conversation in the database.
   const createConversation = useCallback(async (): Promise<Conversation> => {
@@ -90,7 +111,7 @@ export function useConversations(initialId?: string) {
 
     const conversation = data.conversation;
 
-    setConversations((previous) => [
+    updateConversations((previous) => [
       conversation,
       ...previous.filter((item) => item.id !== conversation.id),
     ]);
@@ -98,7 +119,7 @@ export function useConversations(initialId?: string) {
     setActiveConversationId(conversation.id);
 
     return conversation;
-  }, []);
+  }, [updateConversations]);
 
   // Select an existing conversation.
   const selectConversation = useCallback((id: string) => {
@@ -136,7 +157,7 @@ export function useConversations(initialId?: string) {
 
         const updatedConversation = data.conversation;
 
-        setConversations((previous) =>
+        updateConversations((previous) =>
           previous
             .map((item) =>
               item.id === id ? updatedConversation : item,
@@ -159,7 +180,7 @@ export function useConversations(initialId?: string) {
         return false;
       }
     },
-    [],
+    [updateConversations],
   );
 
   // Delete a conversation from the database.
@@ -178,7 +199,7 @@ export function useConversations(initialId?: string) {
 
         await readResponse<{ message: string }>(response);
 
-        setConversations((previous) =>
+        updateConversations((previous) =>
           previous.filter((item) => item.id !== id),
         );
 
@@ -197,7 +218,7 @@ export function useConversations(initialId?: string) {
         return false;
       }
     },
-    [],
+    [updateConversations],
   );
 
   return {

@@ -1,39 +1,24 @@
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
-
 import { ChatContainer } from "@/features/chat/components/chat-container";
-import { auth } from "@/lib/auth/server";
 
-interface ChatPageProps {
-  params: Promise<{
-    conversationId: string;
-  }>;
-}
-
-async function ProtectedConversation({
+async function ConversationContent({
   params,
-}: ChatPageProps) {
-  const { data: session } = await auth.getSession();
-
-  if (!session?.user) {
-    redirect("/login");
-  }
-
+}: {
+  params: Promise<{ conversationId: string }>;
+}) {
   const { conversationId } = await params;
 
   return <ChatContainer conversationId={conversationId} />;
 }
 
-export default function ConversationPage({ params }: ChatPageProps) {
+export default function ConversationPage({
+  params,
+}: {
+  params: Promise<{ conversationId: string }>;
+}) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center">
-          Loading conversation...
-        </div>
-      }
-    >
-      <ProtectedConversation params={params} />
+    <Suspense fallback={null}>
+      <ConversationContent params={params} />
     </Suspense>
   );
 }
