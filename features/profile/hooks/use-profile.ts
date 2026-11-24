@@ -24,6 +24,13 @@ type ImageApiResponse = {
 
 const PROFILE_UPDATED_EVENT = "profile-updated";
 
+// Keeps the profile populated across route transitions (/chat/8 -> /chat/9).
+let cachedProfile: UserProfile | null = null;
+
+export function clearProfileCache() {
+  cachedProfile = null;
+}
+
 async function readResponse<T>(response: Response): Promise<T> {
   const data: unknown = await response.json().catch(() => ({}));
 
@@ -57,6 +64,7 @@ function mapProfile(data: ApiProfile): UserProfile {
  * Broadcast a profile update to every mounted useProfile() instance.
  */
 function publishProfileUpdate(profile: UserProfile) {
+  cachedProfile = profile;
   window.dispatchEvent(
     new CustomEvent<UserProfile>(PROFILE_UPDATED_EVENT, {
       detail: profile,
@@ -65,9 +73,11 @@ function publishProfileUpdate(profile: UserProfile) {
 }
 
 export function useProfile() {
-  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<UserProfile>(
+    () => cachedProfile ?? DEFAULT_PROFILE,
+  );
+  const [isLoaded, setIsLoaded] = useState(() => cachedProfile !== null);
+  const [loading, setLoading] = useState(() => cachedProfile === null);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
@@ -81,20 +91,15 @@ export function useProfile() {
       const customEvent = event as CustomEvent<UserProfile>;
 
       if (customEvent.detail) {
+        cachedProfile = customEvent.detail;
         setProfile(customEvent.detail);
       }
     }
 
-    window.addEventListener(
-      PROFILE_UPDATED_EVENT,
-      handleProfileUpdated,
-    );
+    window.addEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated);
 
     return () => {
-      window.removeEventListener(
-        PROFILE_UPDATED_EVENT,
-        handleProfileUpdated,
-      );
+      window.removeEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated);
     };
   }, []);
 
@@ -111,6 +116,7 @@ export function useProfile() {
     const data = await readResponse<ApiProfile>(response);
     const updatedProfile = mapProfile(data);
 
+    cachedProfile = updatedProfile;
     setProfile(updatedProfile);
     publishProfileUpdate(updatedProfile);
 
@@ -118,14 +124,16 @@ export function useProfile() {
   }, []);
 
   /**
-   * Load profile when the hook mounts.
+   * Load profile when the hook mounts (silently refreshes if cache exists).
    */
   useEffect(() => {
     let active = true;
 
     async function loadProfile() {
       try {
-        setLoading(true);
+        if (cachedProfile === null) {
+          setLoading(true);
+        }
         setError("");
 
         const response = await fetch("/api/profile", {
@@ -135,16 +143,17 @@ export function useProfile() {
         });
 
         const data = await readResponse<ApiProfile>(response);
+        const mapped = mapProfile(data);
+
+        cachedProfile = mapped;
 
         if (active) {
-          setProfile(mapProfile(data));
+          setProfile(mapped);
         }
       } catch (err) {
         if (active) {
           setError(
-            err instanceof Error
-              ? err.message
-              : "Could not load profile.",
+            err instanceof Error ? err.message : "Could not load profile.",
           );
         }
       } finally {
@@ -191,9 +200,7 @@ export function useProfile() {
         return true;
       } catch (err) {
         setError(
-          err instanceof Error
-            ? err.message
-            : "Could not save profile.",
+          err instanceof Error ? err.message : "Could not save profile.",
         );
 
         return false;
@@ -222,8 +229,7 @@ export function useProfile() {
           body: formData,
         });
 
-        const result =
-          await readResponse<ImageApiResponse>(response);
+        const result = await readResponse<ImageApiResponse>(response);
 
         // Update the current profile immediately.
         const updatedProfile: UserProfile = {
@@ -232,6 +238,7 @@ export function useProfile() {
           avatarUrl: result.imageUrl ?? "",
         };
 
+        cachedProfile = updatedProfile;
         setProfile(updatedProfile);
 
         // Update SidebarProfile and every other useProfile() instance.
@@ -240,9 +247,7 @@ export function useProfile() {
         return true;
       } catch (err) {
         setError(
-          err instanceof Error
-            ? err.message
-            : "Could not upload image.",
+          err instanceof Error ? err.message : "Could not upload image.",
         );
 
         return false;
@@ -266,8 +271,7 @@ export function useProfile() {
         credentials: "same-origin",
       });
 
-      const result =
-        await readResponse<ImageApiResponse>(response);
+      const result = await readResponse<ImageApiResponse>(response);
 
       const updatedProfile: UserProfile = {
         ...profile,
@@ -275,15 +279,14 @@ export function useProfile() {
         avatarUrl: result.imageUrl ?? "",
       };
 
+      cachedProfile = updatedProfile;
       setProfile(updatedProfile);
       publishProfileUpdate(updatedProfile);
 
       return true;
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Could not remove image.",
+        err instanceof Error ? err.message : "Could not remove image.",
       );
 
       return false;

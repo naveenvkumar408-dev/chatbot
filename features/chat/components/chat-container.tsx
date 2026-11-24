@@ -73,6 +73,7 @@ export function ChatContainer({
         messages,
         isLoading,
         isLoaded: messagesLoaded,
+        error: chatError,
         sendMessage,
     } = useChat(chatId);
 
@@ -199,17 +200,14 @@ export function ChatContainer({
 
         try {
             let targetId = conversationId ?? activeConversationId;
+            let isNewConversation = false;
 
-            // Create a database conversation if this is the first message.
             if (!targetId) {
                 const conversation = await createConversation();
-
                 targetId = conversation.id;
-
-                router.push(`/chat/${targetId}`);
+                isNewConversation = true;
             }
 
-            // Automatically title the conversation using its first message.
             if (messages.length === 0) {
                 const title = content.trim().replace(/\s+/g, " ").slice(0, 40);
 
@@ -218,7 +216,11 @@ export function ChatContainer({
                 }
             }
 
-            sendMessage(content, targetId);
+            await sendMessage(content, targetId);
+
+            if (isNewConversation) {
+                router.push(`/chat/${targetId}`);
+            }
         } catch (error) {
             console.error("Could not send message:", error);
         }
@@ -441,10 +443,12 @@ export function ChatContainer({
                 ) : (
                     <div className="flex min-h-0 flex-1 flex-col">
                         {!messagesLoaded ? (
-                            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                                Loading conversation...
+                            <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 py-6">
+                                <div className="ml-auto h-10 w-48 animate-pulse rounded-2xl bg-muted" />
+                                <div className="h-20 w-3/4 animate-pulse rounded-2xl bg-muted" />
+                                <div className="ml-auto h-10 w-64 animate-pulse rounded-2xl bg-muted" />
                             </div>
-                        ) : messages.length === 0 ? (
+                        ) : messages.length === 0 && !isLoading ? (
                             <div className="flex flex-1 flex-col items-center justify-center px-4 text-center">
                                 <Sparkles className="mb-5 size-8 text-muted-foreground" />
 
@@ -462,10 +466,21 @@ export function ChatContainer({
                             </div>
                         )}
 
-                        <ChatInput
-                            onSend={handleSendMessage}
-                            disabled={!messagesLoaded || isLoading}
-                        />
+                        <div className="shrink-0">
+                            {chatError && (
+                                <p
+                                    role="alert"
+                                    className="mx-auto mb-2 max-w-3xl px-4 text-sm text-destructive"
+                                >
+                                    {chatError}
+                                </p>
+                            )}
+
+                            <ChatInput
+                                onSend={handleSendMessage}
+                                disabled={!messagesLoaded || isLoading}
+                            />
+                        </div>
                     </div>
                 )}
 
