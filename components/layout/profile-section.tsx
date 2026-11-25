@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,6 +7,7 @@ import {
   Settings,
   UserRound,
   Palette,
+  KeyRound,
 } from "lucide-react";
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type SettingsSection = "profile" | "appearance";
+type SettingsSection = "profile" | "appearance" | "api";
 
 interface SidebarProfileProps {
   settingsMode?: boolean;
@@ -44,7 +44,6 @@ export function SidebarProfile({
 
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
 
   useEffect(() => {
@@ -78,6 +77,7 @@ export function SidebarProfile({
     const items = [
       { id: "profile" as const, label: "Profile", icon: UserRound },
       { id: "appearance" as const, label: "Appearance", icon: Palette },
+      { id: "api" as const, label: "API Configure", icon: KeyRound },
     ];
 
     return (
@@ -130,10 +130,12 @@ export function SidebarProfile({
 
   return (
     <div className="w-full min-w-0">
-      <DropdownMenu key={dropdownCloseKey}
+      <DropdownMenu
+        key={dropdownCloseKey}
         onOpenChange={(open) => {
           console.log("Profile dropdown:", open ? "OPENED" : "CLOSED");
-        }}>
+        }}
+      >
         <DropdownMenuTrigger asChild>
           <button
             type="button"

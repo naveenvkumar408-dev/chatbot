@@ -1,21 +1,19 @@
-
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { Menu, Sparkles, GripVertical } from "lucide-react";
+import { Menu, Sparkles, Moon, Sun, ArrowLeft } from "lucide-react";
+import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
-import { Sidebar } from "@/components/layout/sidebar";
+import { Sidebar, type SettingsSection } from "@/components/layout/sidebar";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
 import { useChat } from "../hooks/use-chat";
 import { useConversations } from "@/features/conversation/hooks/use-conversations";
 import { ProfileCompletionForm } from "@/features/profile/components/profile-completion-form";
-import { Moon, Sun, ArrowLeft } from "lucide-react";
-import { useTheme } from "next-themes";
-
+import { ApiConfigForm } from "@/features/settings/components/api-config-form";
 
 interface ChatContainerProps {
     conversationId?: string;
@@ -30,16 +28,17 @@ export function ChatContainer({
     const { theme, setTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
 
-
+    const sectionParam = searchParams.get("section");
     const settingsSection: SettingsSection =
-        searchParams.get("section") === "appearance"
+        sectionParam === "appearance"
             ? "appearance"
-            : "profile";
+            : sectionParam === "api"
+                ? "api"
+                : "profile";
 
     function selectSettingsSection(section: SettingsSection) {
         router.push(`/chat?view=settings&section=${section}`);
     }
-
 
     useEffect(() => {
         setMounted(true);
@@ -65,7 +64,6 @@ export function ChatContainer({
         }
     }, [conversationError]);
 
-    // A dedicated route always uses its own UUID.
     const chatId =
         conversationId ?? activeConversationId ?? "new-chat";
 
@@ -76,22 +74,6 @@ export function ChatContainer({
         error: chatError,
         sendMessage,
     } = useChat(chatId);
-
-    useEffect(() => {
-        console.log("[ChatContainer] Conversation state:", {
-            conversationId: chatId,
-            conversations,
-            activeConversationId,
-            conversationsLoaded,
-            conversationError,
-        });
-    }, [
-        chatId,
-        conversations,
-        activeConversationId,
-        conversationsLoaded,
-        conversationError,
-    ]);
 
     const activeConversation = conversations.find(
         (conversation) => conversation.id === chatId
@@ -121,8 +103,6 @@ export function ChatContainer({
         };
 
         event.currentTarget.setPointerCapture(event.pointerId);
-
-        // Close the account dropdown before resizing.
         setDropdownCloseKey((previous) => previous + 1);
     }
 
@@ -226,9 +206,6 @@ export function ChatContainer({
         }
     }
 
-    type SettingsSection = "profile" | "appearance";
-
-
     const sidebarProps = {
         conversations,
         activeConversationId: conversationId ?? activeConversationId,
@@ -242,7 +219,6 @@ export function ChatContainer({
         width: sidebarWidth,
         dropdownCloseKey,
     };
-
 
     return (
         <main className="flex h-dvh overflow-hidden bg-background">
@@ -283,11 +259,9 @@ export function ChatContainer({
                 )}
             </div>
 
-
             {/* Mobile sidebar overlay */}
             {sidebarOpen && (
                 <div className="fixed inset-0 z-100 md:hidden">
-                    {/* Blurred background */}
                     <button
                         type="button"
                         aria-label="Close sidebar"
@@ -295,7 +269,6 @@ export function ChatContainer({
                         className="absolute inset-0 size-full cursor-default bg-black/30 backdrop-blur-md"
                     />
 
-                    {/* Sidebar panel */}
                     <div
                         className="absolute inset-y-0 left-0 z-10 h-dvh max-w-[85vw] shadow-2xl"
                         style={{
@@ -309,7 +282,6 @@ export function ChatContainer({
                             onClose={() => setSidebarOpen(false)}
                         />
 
-                        {/* Resize handle */}
                         <div
                             role="separator"
                             aria-label="Resize sidebar"
@@ -324,12 +296,9 @@ export function ChatContainer({
                 </div>
             )}
 
-
             {/* Main panel: shared header and switchable content */}
             <section className="flex min-w-0 flex-1 flex-col">
-
                 <header className="flex h-14 w-full shrink-0 items-center border-b px-4">
-                    {/* Left side */}
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                         <Button
                             variant="ghost"
@@ -358,9 +327,7 @@ export function ChatContainer({
                         )}
                     </div>
 
-                    {/* Far right side */}
                     <div className="ml-auto flex shrink-0 items-center justify-end">
-
                         <Button
                             type="button"
                             variant="ghost"
@@ -383,12 +350,12 @@ export function ChatContainer({
                     </div>
                 </header>
 
-
-
                 {isSettingsView ? (
                     <div className="min-h-0 flex-1 overflow-y-auto">
                         {settingsSection === "profile" ? (
                             <ProfileCompletionForm />
+                        ) : settingsSection === "api" ? (
+                            <ApiConfigForm />
                         ) : (
                             <div className="mx-auto w-full max-w-3xl space-y-6 p-6 sm:p-10">
                                 <div>
@@ -483,7 +450,6 @@ export function ChatContainer({
                         </div>
                     </div>
                 )}
-
             </section>
         </main>
     );

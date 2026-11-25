@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -16,7 +15,7 @@ import { ConversationList } from "@/features/conversation/components/conversatio
 import type { Conversation } from "@/features/conversation/types/conversation.types";
 import { SidebarProfile } from "@/components/layout/profile-section";
 
-export type SettingsSection = "profile" | "appearance";
+export type SettingsSection = "profile" | "appearance" | "api";
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -34,7 +33,6 @@ interface SidebarProps {
   width?: number;
   dropdownCloseKey?: number;
 }
-
 
 export function Sidebar({
   conversations,
@@ -54,7 +52,6 @@ export function Sidebar({
 }: SidebarProps) {
   const isCollapsed = collapsed && !settingsMode;
 
-
   return (
     <aside
       style={{
@@ -65,8 +62,9 @@ export function Sidebar({
     >
       {/* Sidebar header */}
       <div
-        className={`flex h-11 shrink-0 items-center ${isCollapsed ? "justify-center" : "justify-between px-1"
-          }`}
+        className={`flex h-11 shrink-0 items-center ${
+          isCollapsed ? "justify-center" : "justify-between px-1"
+        }`}
       >
         {isCollapsed ? (
           <div className="group relative flex size-10 items-center justify-center">
@@ -128,8 +126,9 @@ export function Sidebar({
         <>
           {/* New chat */}
           <div
-            className={`mt-4 shrink-0 ${isCollapsed ? "flex justify-center" : ""
-              }`}
+            className={`mt-4 shrink-0 ${
+              isCollapsed ? "flex justify-center" : ""
+            }`}
           >
             {isCollapsed ? (
               <Button

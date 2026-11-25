@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth/server";
 import { sql } from "@/lib/db";
+import { decryptApiKey } from "@/lib/crypto";
 import { generateGeminiResponse } from "@/lib/gemini";
 import type { ChatMessage } from "@/features/chat/types/chat.types";
 
@@ -48,6 +49,26 @@ async function ownsConversation(conversationId: string, userId: string) {
   `;
 
   return rows.length > 0;
+}
+
+async function getUserGeminiApiKey(userId: string): Promise<string | undefined> {
+  const rows = await sql`
+    SELECT ak.encrypted_key
+    FROM public.api_keys AS ak
+    INNER JOIN public.profiles AS p
+      ON p.id = ak.profile_id
+    WHERE
+      p.user_id = ${userId}::uuid
+      AND ak.provider = 'gemini'
+    LIMIT 1
+  `;
+
+  const encrypted = rows[0]?.encrypted_key;
+  if (!encrypted || typeof encrypted !== "string") {
+    return undefined;
+  }
+
+  return decryptApiKey(encrypted);
 }
 
 function parseStoredMessages(raw: unknown): StoredMessage[] {
@@ -201,8 +222,9 @@ export async function POST(request: Request, { params }: RouteContext) {
       { role: "user", content },
     ];
 
-    // Generate the assistant response.
-    const assistantContent = await generateGeminiResponse(history);
+    // Use user's personal Gemini key if configured, otherwise fallback to server env key.
+    const userApiKey = await getUserGeminiApiKey(user.id);
+    const assistantContent = await generateGeminiResponse(history, userApiKey);
 
     const newPair: StoredMessage[] = [
       { role: "user", content },
