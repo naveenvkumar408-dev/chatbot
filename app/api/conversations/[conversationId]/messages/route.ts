@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { decryptApiKey } from "@/lib/crypto";
 import { generateGeminiResponse } from "@/lib/gemini";
 import type { ChatMessage } from "@/features/chat/types/chat.types";
+import { DEFAULT_GEMINI_MODEL, isValidGeminiModel } from "@/lib/models";
 
 type RouteContext = {
   params: Promise<{
@@ -51,7 +52,9 @@ async function ownsConversation(conversationId: string, userId: string) {
   return rows.length > 0;
 }
 
-async function getUserGeminiApiKey(userId: string): Promise<string | undefined> {
+async function getUserGeminiApiKey(
+  userId: string,
+): Promise<string | undefined> {
   const rows = await sql`
     SELECT ak.encrypted_key
     FROM public.api_keys AS ak
@@ -72,11 +75,22 @@ async function getUserGeminiApiKey(userId: string): Promise<string | undefined> 
 }
 
 function parseStoredMessages(raw: unknown): StoredMessage[] {
-  if (!Array.isArray(raw)) {
+  const parsed =
+    typeof raw === "string"
+      ? (() => {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return [];
+          }
+        })()
+      : raw;
+
+  if (!Array.isArray(parsed)) {
     return [];
   }
 
-  return raw.filter(
+  return parsed.filter(
     (item): item is StoredMessage =>
       typeof item === "object" &&
       item !== null &&
@@ -205,6 +219,11 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
+    const selectedModel =
+      "model" in body && isValidGeminiModel(body.model)
+        ? body.model
+        : DEFAULT_GEMINI_MODEL;
+
     // Load existing conversation history from the single row.
     const existingRows = await sql`
       SELECT message
@@ -224,7 +243,11 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     // Use user's personal Gemini key if configured, otherwise fallback to server env key.
     const userApiKey = await getUserGeminiApiKey(user.id);
-    const assistantContent = await generateGeminiResponse(history, userApiKey);
+    const assistantContent = await generateGeminiResponse(
+      history,
+      userApiKey,
+      selectedModel,
+    );
 
     const newPair: StoredMessage[] = [
       { role: "user", content },

@@ -14,19 +14,20 @@ import { useChat } from "../hooks/use-chat";
 import { useConversations } from "@/features/conversation/hooks/use-conversations";
 import { ProfileCompletionForm } from "@/features/profile/components/profile-completion-form";
 import { ApiConfigForm } from "@/features/settings/components/api-config-form";
+import { DEFAULT_GEMINI_MODEL, type GeminiModelId } from "@/lib/models";
 
 interface ChatContainerProps {
     conversationId?: string;
 }
 
-export function ChatContainer({
-    conversationId,
-}: ChatContainerProps) {
+export function ChatContainer({ conversationId }: ChatContainerProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const isSettingsView = searchParams.get("view") === "settings";
     const { theme, setTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
+    const [selectedModel, setSelectedModel] =
+        useState<GeminiModelId>(DEFAULT_GEMINI_MODEL);
 
     const sectionParam = searchParams.get("section");
     const settingsSection: SettingsSection =
@@ -59,13 +60,12 @@ export function ChatContainer({
         if (conversationError) {
             console.error(
                 "[ChatContainer] Conversation loading error:",
-                conversationError
+                conversationError,
             );
         }
     }, [conversationError]);
 
-    const chatId =
-        conversationId ?? activeConversationId ?? "new-chat";
+    const chatId = conversationId ?? activeConversationId ?? "new-chat";
 
     const {
         messages,
@@ -76,7 +76,7 @@ export function ChatContainer({
     } = useChat(chatId);
 
     const activeConversation = conversations.find(
-        (conversation) => conversation.id === chatId
+        (conversation) => conversation.id === chatId,
     );
 
     const conversationTitle = activeConversation?.title ?? "New chat";
@@ -112,15 +112,11 @@ export function ChatContainer({
         if (!start || start.pointerId !== event.pointerId) return;
 
         const isMobile = window.innerWidth < 768;
-        const maxWidth = isMobile
-            ? Math.min(480, window.innerWidth * 0.85)
-            : 480;
+        const maxWidth = isMobile ? Math.min(480, window.innerWidth * 0.85) : 480;
 
         const nextWidth = start.startWidth + (event.clientX - start.startX);
 
-        setSidebarWidth(
-            Math.min(maxWidth, Math.max(240, nextWidth)),
-        );
+        setSidebarWidth(Math.min(maxWidth, Math.max(240, nextWidth)));
     }
 
     function handleResizeEnd(event: ReactPointerEvent<HTMLDivElement>) {
@@ -157,10 +153,7 @@ export function ChatContainer({
             const success = await deleteConversation(id);
 
             if (!success) {
-                console.error(
-                    "[ChatContainer] Conversation deletion failed:",
-                    id
-                );
+                console.error("[ChatContainer] Conversation deletion failed:", id);
                 return;
             }
 
@@ -168,10 +161,7 @@ export function ChatContainer({
                 router.push("/chat");
             }
         } catch (error) {
-            console.error(
-                "[ChatContainer] Could not delete conversation:",
-                error
-            );
+            console.error("[ChatContainer] Could not delete conversation:", error);
         }
     }
 
@@ -196,7 +186,7 @@ export function ChatContainer({
                 }
             }
 
-            await sendMessage(content, targetId);
+            await sendMessage(content, targetId, selectedModel);
 
             if (isNewConversation) {
                 router.push(`/chat/${targetId}`);
@@ -321,9 +311,7 @@ export function ChatContainer({
                                 Back to chat
                             </Button>
                         ) : (
-                            <span className="truncate font-medium">
-                                {conversationTitle}
-                            </span>
+                            <span className="truncate font-medium">{conversationTitle}</span>
                         )}
                     </div>
 
@@ -333,9 +321,7 @@ export function ChatContainer({
                             variant="ghost"
                             size="icon"
                             aria-label="Toggle theme"
-                            onClick={() =>
-                                setTheme(theme === "dark" ? "light" : "dark")
-                            }
+                            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                         >
                             {mounted ? (
                                 theme === "dark" ? (
@@ -362,9 +348,7 @@ export function ChatContainer({
                                     <p className="text-sm text-muted-foreground">
                                         PERSONALIZATION
                                     </p>
-                                    <h1 className="mt-2 text-2xl font-semibold">
-                                        Appearance
-                                    </h1>
+                                    <h1 className="mt-2 text-2xl font-semibold">Appearance</h1>
                                     <p className="mt-2 text-sm text-muted-foreground">
                                         Customize how AI Chat looks on your device.
                                     </p>
@@ -424,7 +408,8 @@ export function ChatContainer({
                                 </h1>
 
                                 <p className="mt-3 max-w-md text-sm text-muted-foreground">
-                                    Ask questions, explore ideas, or get help with your next project.
+                                    Ask questions, explore ideas, or get help with your next
+                                    project.
                                 </p>
                             </div>
                         ) : (
@@ -446,6 +431,8 @@ export function ChatContainer({
                             <ChatInput
                                 onSend={handleSendMessage}
                                 disabled={!messagesLoaded || isLoading}
+                                selectedModel={selectedModel}
+                                onModelChange={setSelectedModel}
                             />
                         </div>
                     </div>
