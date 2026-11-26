@@ -1,4 +1,5 @@
 import "server-only";
+import { DEFAULT_GEMINI_MODEL } from "@/lib/models";
 
 type GeminiPart = {
   text?: string;
@@ -58,19 +59,19 @@ async function requestGemini(
 export async function generateGeminiResponse(
   history: GeminiHistoryMessage[],
   customApiKey?: string,
+  selectedModel?: string,
 ): Promise<string> {
   const apiKey = customApiKey?.trim() || process.env.GEMINI_API_KEY?.trim();
-  const primaryModel = process.env.GEMINI_MODEL?.trim();
+  const primaryModel =
+    selectedModel?.trim() ||
+    process.env.GEMINI_MODEL?.trim() ||
+    DEFAULT_GEMINI_MODEL;
   const fallbackModel = process.env.GEMINI_FALLBACK_MODEL?.trim();
 
   if (!apiKey) {
     throw new Error(
       "No Gemini API key configured. Add your key in Settings > API Configure.",
     );
-  }
-
-  if (!primaryModel) {
-    throw new Error("GEMINI_MODEL is not configured.");
   }
 
   const contents = history.map((item) => ({

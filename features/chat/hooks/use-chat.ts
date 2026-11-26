@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ChatMessage } from "@/features/chat/types/chat.types";
+import { DEFAULT_GEMINI_MODEL, type GeminiModelId } from "@/lib/models";
 
 async function readResponse<T>(response: Response): Promise<T> {
   const data: unknown = await response.json().catch(() => ({}));
@@ -83,6 +84,7 @@ export function useChat(conversationId: string) {
     async (
       content: string,
       targetId: string = conversationId,
+      model: GeminiModelId = DEFAULT_GEMINI_MODEL,
     ) => {
       const text = content.trim();
 
@@ -114,6 +116,7 @@ export function useChat(conversationId: string) {
             },
             body: JSON.stringify({
               content: text,
+              model,
             }),
           },
         );
@@ -125,13 +128,9 @@ export function useChat(conversationId: string) {
         setMessages(data.messages);
       } catch (err) {
         // Remove the optimistic message if the request failed
-        setMessages((previous) =>
-          previous.filter((msg) => msg.id !== tempId),
-        );
+        setMessages((previous) => previous.filter((msg) => msg.id !== tempId));
         setError(
-          err instanceof Error
-            ? err.message
-            : "Could not send your message.",
+          err instanceof Error ? err.message : "Could not send your message.",
         );
       } finally {
         setIsLoading(false);
