@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    useSyncExternalStore,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { Menu, Sparkles, Moon, Sun, ArrowLeft } from "lucide-react";
@@ -18,6 +24,30 @@ import { DEFAULT_GEMINI_MODEL, type GeminiModelId } from "@/lib/models";
 
 interface ChatContainerProps {
     conversationId?: string;
+}
+
+const SIDEBAR_COLLAPSED_KEY = "chat_sidebar_collapsed_v1";
+const SIDEBAR_COLLAPSED_EVENT = "chat-sidebar-collapsed-change";
+
+function subscribeSidebarCollapsed(callback: () => void) {
+    window.addEventListener("storage", callback);
+    window.addEventListener(SIDEBAR_COLLAPSED_EVENT, callback);
+    return () => {
+        window.removeEventListener("storage", callback);
+        window.removeEventListener(SIDEBAR_COLLAPSED_EVENT, callback);
+    };
+}
+
+function getSidebarCollapsedSnapshot(): boolean {
+    try {
+        return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+    } catch {
+        return false;
+    }
+}
+
+function getSidebarCollapsedServerSnapshot(): boolean {
+    return false;
 }
 
 export function ChatContainer({ conversationId }: ChatContainerProps) {
@@ -82,7 +112,26 @@ export function ChatContainer({ conversationId }: ChatContainerProps) {
     const conversationTitle = activeConversation?.title ?? "New chat";
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+    const sidebarCollapsed = useSyncExternalStore(
+        subscribeSidebarCollapsed,
+        getSidebarCollapsedSnapshot,
+        getSidebarCollapsedServerSnapshot,
+    );
+
+    const setSidebarCollapsed = useCallback(
+        (value: boolean | ((prev: boolean) => boolean)) => {
+            const current = getSidebarCollapsedSnapshot();
+            const next = typeof value === "function" ? value(current) : value;
+            try {
+                window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
+                window.dispatchEvent(new Event(SIDEBAR_COLLAPSED_EVENT));
+            } catch {
+                // Ignore storage errors
+            }
+        },
+        [],
+    );
 
     const [sidebarWidth, setSidebarWidth] = useState(288);
     const [dropdownCloseKey, setDropdownCloseKey] = useState(0);
@@ -199,6 +248,7 @@ export function ChatContainer({ conversationId }: ChatContainerProps) {
     const sidebarProps = {
         conversations,
         activeConversationId: conversationId ?? activeConversationId,
+        isConversationsLoading: !conversationsLoaded,
         onNewChat: handleNewChat,
         onSelectConversation: handleSelectConversation,
         onDeleteConversation: handleDeleteConversation,

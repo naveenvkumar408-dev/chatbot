@@ -6,12 +6,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   MessageSquarePlus,
-  MessageSquare,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { NewChatButton } from "@/features/conversation/components/new-chat-button";
 import { ConversationList } from "@/features/conversation/components/conversation-list";
+import { CollapsedConversationsMenu } from "@/features/conversation/components/collapsed-conversations-menu";
 import type { Conversation } from "@/features/conversation/types/conversation.types";
 import { SidebarProfile } from "@/components/layout/profile-section";
 
@@ -20,6 +20,7 @@ export type SettingsSection = "profile" | "appearance" | "api";
 interface SidebarProps {
   conversations: Conversation[];
   activeConversationId: string | null;
+  isConversationsLoading?: boolean;
   onNewChat: () => void;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
@@ -37,6 +38,7 @@ interface SidebarProps {
 export function Sidebar({
   conversations,
   activeConversationId,
+  isConversationsLoading = false,
   onNewChat,
   onSelectConversation,
   onDeleteConversation,
@@ -62,9 +64,8 @@ export function Sidebar({
     >
       {/* Sidebar header */}
       <div
-        className={`flex h-11 shrink-0 items-center ${
-          isCollapsed ? "justify-center" : "justify-between px-1"
-        }`}
+        className={`flex h-11 shrink-0 items-center ${isCollapsed ? "justify-center" : "justify-between px-1"
+          }`}
       >
         {isCollapsed ? (
           <div className="group relative flex size-10 items-center justify-center">
@@ -126,9 +127,8 @@ export function Sidebar({
         <>
           {/* New chat */}
           <div
-            className={`mt-4 shrink-0 ${
-              isCollapsed ? "flex justify-center" : ""
-            }`}
+            className={`mt-4 shrink-0 ${isCollapsed ? "flex justify-center" : ""
+              }`}
           >
             {isCollapsed ? (
               <Button
@@ -138,6 +138,7 @@ export function Sidebar({
                 onClick={onNewChat}
                 aria-label="New chat"
                 title="New chat"
+                className="rounded-xl"
               >
                 <MessageSquarePlus className="size-5" />
               </Button>
@@ -147,31 +148,23 @@ export function Sidebar({
           </div>
 
           {/* Conversations */}
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <div
+            className={`min-h-0 flex-1 ${isCollapsed ? "mt-2" : "overflow-y-auto overflow-x-hidden mt-2"
+              }`}
+          >
             {isCollapsed ? (
-              <div className="flex flex-col items-center gap-2">
-                {conversations.map((conversation) => (
-                  <Button
-                    key={conversation.id}
-                    type="button"
-                    variant={
-                      conversation.id === activeConversationId
-                        ? "secondary"
-                        : "ghost"
-                    }
-                    size="icon"
-                    title={conversation.title}
-                    aria-label={conversation.title}
-                    onClick={() => onSelectConversation(conversation.id)}
-                  >
-                    <MessageSquare className="size-4" />
-                  </Button>
-                ))}
-              </div>
+              <CollapsedConversationsMenu
+                conversations={conversations}
+                activeConversationId={activeConversationId}
+                isLoading={isConversationsLoading}
+                onSelectConversation={onSelectConversation}
+                dropdownCloseKey={dropdownCloseKey}
+              />
             ) : (
               <ConversationList
                 conversations={conversations}
                 activeConversationId={activeConversationId}
+                isLoading={isConversationsLoading}
                 onSelect={onSelectConversation}
                 onDelete={onDeleteConversation}
                 onRename={onRenameConversation}
