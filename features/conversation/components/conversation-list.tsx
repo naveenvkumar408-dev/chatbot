@@ -1,54 +1,75 @@
 "use client";
 
-import { MessageSquareText } from "lucide-react";
-
-import { ScrollArea } from "@/components/ui/scroll-area";
-
 import type { Conversation } from "../types/conversation.types";
 import { ConversationItem } from "./conversation-item";
 
 interface ConversationListProps {
-    conversations: Conversation[];
-    activeConversationId: string | null;
-    onSelect: (id: string) => void;
-    onDelete: (id: string) => void;
-    onRename: (id: string, newTitle: string) => void;
+  conversations: Conversation[];
+  activeConversationId: string | null;
+  isLoading?: boolean;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+  onRename: (id: string, newTitle: string) => void;
 }
 
+const SKELETON_WIDTHS = [
+  "w-4/5",
+  "w-3/5",
+  "w-11/12",
+  "w-2/3",
+  "w-3/4",
+  "w-1/2",
+];
+
 export function ConversationList({
-    conversations,
-    activeConversationId,
-    onSelect,
-    onDelete,
-    onRename
+  conversations,
+  activeConversationId,
+  isLoading = false,
+  onSelect,
+  onDelete,
+  onRename,
 }: ConversationListProps) {
+  if (isLoading) {
     return (
-        <ScrollArea className="min-h-0 flex-1">
-            <div className="space-y-1 p-2">
-                <p className="px-2 py-2 text-xs font-medium text-muted-foreground">
-                    Recent conversations
-                </p>
-
-                {conversations.map((conversation) => (
-                    <ConversationItem
-                        key={conversation.id}
-                        conversation={conversation}
-                        isActive={activeConversationId === conversation.id}
-                        onSelect={() => onSelect(conversation.id)}
-                        onDelete={() => onDelete(conversation.id)}
-                        onRename={(newTitle) => onRename(conversation.id, newTitle)}
-                    />
-                ))}
-
-                {conversations.length === 0 && (
-                    <div className="flex flex-col items-center gap-2 px-3 py-8 text-center">
-                        <MessageSquareText className="size-5 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">
-                            No conversations yet.
-                        </p>
-                    </div>
-                )}
-            </div>
-        </ScrollArea>
+      <div
+        aria-busy="true"
+        aria-label="Loading conversations"
+        className="space-y-1.5 py-1"
+      >
+        {SKELETON_WIDTHS.map((widthClass, index) => (
+          <div
+            key={index}
+            className="flex h-9 items-center rounded-lg px-2.5"
+          >
+            <div
+              className={`h-3.5 ${widthClass} animate-pulse rounded-md bg-muted`}
+            />
+          </div>
+        ))}
+      </div>
     );
+  }
+
+  if (conversations.length === 0) {
+    return (
+      <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+        No conversations yet
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {conversations.map((conversation) => (
+        <ConversationItem
+          key={conversation.id}
+          conversation={conversation}
+          isActive={conversation.id === activeConversationId}
+          onSelect={() => onSelect(conversation.id)}
+          onDelete={() => onDelete(conversation.id)}
+          onRename={(newTitle) => onRename(conversation.id, newTitle)}
+        />
+      ))}
+    </div>
+  );
 }

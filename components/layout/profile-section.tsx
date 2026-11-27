@@ -1,20 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  LogOut,
-  Settings,
-  UserRound,
+  User,
   Palette,
   KeyRound,
+  Settings,
+  LogOut,
+  Trash2,
 } from "lucide-react";
 
-import { useAuth } from "@/features/auth/hooks/use-auth";
+import { authClient } from "@/lib/auth/client";
 import { useProfile } from "@/features/profile/hooks/use-profile";
+import type { SettingsSection } from "./sidebar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LoadingSpinner } from "../shared/loading-spinner";
-
+import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,8 +24,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-type SettingsSection = "profile" | "appearance" | "api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface SidebarProfileProps {
   settingsMode?: boolean;
@@ -32,6 +40,16 @@ interface SidebarProfileProps {
   dropdownCloseKey?: number;
 }
 
+const SETTINGS_NAV_ITEMS: Array<{
+  id: SettingsSection;
+  label: string;
+  icon: typeof User;
+}> = [
+  { id: "profile", label: "Profile", icon: User },
+  { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "api", label: "API Configure", icon: KeyRound },
+];
+
 export function SidebarProfile({
   settingsMode = false,
   activeSettingsSection = "profile",
@@ -39,166 +57,301 @@ export function SidebarProfile({
   dropdownCloseKey = 0,
 }: SidebarProfileProps) {
   const router = useRouter();
-  const { user, logout } = useAuth();
   const { profile } = useProfile();
 
-  const [loggingOut, setLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState("");
-  const [avatarError, setAvatarError] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuWidth, setMenuWidth] = useState<number | undefined>(undefined);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [actionError, setActionError] = useState("");
+
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const prevCloseKeyRef = useRef(dropdownCloseKey);
 
   useEffect(() => {
-    setAvatarError(false);
-  }, [profile.avatarUrl]);
+    if (prevCloseKeyRef.current !== dropdownCloseKey) {
+      prevCloseKeyRef.current = dropdownCloseKey;
+      setMenuOpen(false);
+    }
+  }, [dropdownCloseKey]);
 
-  async function handleLogout() {
-    if (loggingOut) return;
+  function handleMenuOpenChange(nextOpen: boolean) {
+    if (nextOpen && triggerRef.current) {
+      const measured = Math.round(
+        triggerRef.current.getBoundingClientRect().width,
+      );
+      setMenuWidth(Math.max(224, measured));
+    }
+    setMenuOpen(nextOpen);
+  }
 
-    setLoggingOut(true);
-    setLogoutError("");
+  const displayName = profile?.fullName?.trim() || "User";
+  const displayEmail = profile?.email?.trim() || "";
+  const avatarUrl = profile?.avatarUrl || undefined;
+  const initials =
+    displayName
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "U";
+
+  function openLogoutConfirm() {
+    setActionError("");
+    setMenuOpen(false);
+    setLogoutDialogOpen(true);
+  }
+
+  function openDeleteConfirm() {
+    setActionError("");
+    setMenuOpen(false);
+    setDeleteDialogOpen(true);
+  }
+
+  async function handleConfirmLogout() {
+    setActionError("");
+    setIsLoggingOut(true);
 
     try {
-      await logout();
+      await authClient.signOut();
+      setLogoutDialogOpen(false);
       router.replace("/login");
       router.refresh();
-    } catch (error) {
-      console.error("Logout failed:", error);
-      setLogoutError("Unable to log out. Please try again.");
-      setLoggingOut(false);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to log out. Try again.",
+      );
+    } finally {
+      setIsLoggingOut(false);
     }
   }
 
-  const initials =
-    (profile.fullName || user?.name || "U")
-      .trim()
-      .charAt(0)
-      .toUpperCase();
+  async function handleConfirmDeleteAccount() {
+    setActionError("");
+    setIsDeletingAccount(true);
 
-  if (settingsMode) {
-    const items = [
-      { id: "profile" as const, label: "Profile", icon: UserRound },
-      { id: "appearance" as const, label: "Appearance", icon: Palette },
-      { id: "api" as const, label: "API Configure", icon: KeyRound },
-    ];
+    try {
+      const res = await fetch("/api/account", {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
 
-    return (
-      <div className="w-full space-y-1">
-        {items.map((item) => {
-          const Icon = item.icon;
-          const active = activeSettingsSection === item.id;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete account.");
+      }
 
-          return (
-            <Button
-              key={item.id}
-              type="button"
-              variant={active ? "secondary" : "ghost"}
-              className="w-full justify-start gap-3"
-              onClick={() => onSelectSettingsSection?.(item.id)}
-            >
-              <Icon className="size-4" />
-              {item.label}
-            </Button>
-          );
-        })}
-
-        <div className="my-2 border-t" />
-
-        <Button
-          type="button"
-          variant="ghost"
-          className="w-full justify-start gap-3 text-destructive hover:text-destructive"
-          disabled={loggingOut}
-          onClick={handleLogout}
-        >
-          {loggingOut ? (
-            <LoadingSpinner text="Logging out..." compact />
-          ) : (
-            <>
-              <LogOut className="size-4" />
-              Log out
-            </>
-          )}
-        </Button>
-
-        {logoutError && (
-          <p role="alert" className="px-2 pt-2 text-xs text-destructive">
-            {logoutError}
-          </p>
-        )}
-      </div>
-    );
+      await authClient.signOut().catch(() => {});
+      setDeleteDialogOpen(false);
+      router.replace("/login");
+      router.refresh();
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : "Failed to delete account. Please try again.",
+      );
+    } finally {
+      setIsDeletingAccount(false);
+    }
   }
 
   return (
-    <div className="w-full min-w-0">
-      <DropdownMenu
-        key={dropdownCloseKey}
+    <>
+      {settingsMode ? (
+        <nav aria-label="Settings sections" className="space-y-1">
+          {SETTINGS_NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeSettingsSection === item.id;
+
+            return (
+              <Button
+                key={item.id}
+                type="button"
+                variant={isActive ? "secondary" : "ghost"}
+                onClick={() => onSelectSettingsSection?.(item.id)}
+                className="w-full justify-start gap-2.5"
+              >
+                <Icon className="size-4 shrink-0" />
+                <span>{item.label}</span>
+              </Button>
+            );
+          })}
+
+          <Separator className="my-3" />
+
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={openLogoutConfirm}
+            className="w-full justify-start gap-2.5 text-muted-foreground hover:text-foreground"
+          >
+            <LogOut className="size-4 shrink-0" />
+            <span>Log out</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={openDeleteConfirm}
+            className="w-full justify-start gap-2.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="size-4 shrink-0" />
+            <span>Delete account</span>
+          </Button>
+        </nav>
+      ) : (
+        <DropdownMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              ref={triggerRef}
+              type="button"
+              variant="ghost"
+              className="h-auto w-full justify-start gap-3 rounded-xl px-2 py-2 text-left"
+            >
+              <Avatar className="size-9 shrink-0">
+                <AvatarImage src={avatarUrl} alt={displayName} />
+                <AvatarFallback className="text-xs font-medium">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium leading-tight">
+                  {displayName}
+                </p>
+                {displayEmail && (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {displayEmail}
+                  </p>
+                )}
+              </div>
+            </Button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            sideOffset={8}
+            style={menuWidth ? { width: `${menuWidth}px` } : undefined}
+            className="min-w-56 rounded-2xl p-1.5"
+          >
+            <DropdownMenuItem
+              onSelect={() => router.push("/chat?view=settings&section=profile")}
+              className="cursor-pointer gap-2.5 rounded-xl px-3 py-2.5"
+            >
+              <Settings className="size-4" />
+              <span>Settings</span>
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator className="my-1" />
+
+            <DropdownMenuItem
+              onSelect={openLogoutConfirm}
+              className="cursor-pointer gap-2.5 rounded-xl px-3 py-2.5 text-destructive focus:text-destructive"
+            >
+              <LogOut className="size-4" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      {/* Logout Confirmation Popup */}
+      <Dialog
+        open={logoutDialogOpen}
         onOpenChange={(open) => {
-          console.log("Profile dropdown:", open ? "OPENED" : "CLOSED");
+          if (!isLoggingOut) {
+            setLogoutDialogOpen(open);
+            if (!open) setActionError("");
+          }
         }}
       >
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            disabled={loggingOut}
-            className="flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-xl p-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-          >
-            <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-sm font-semibold">
-              {profile.avatarUrl && !avatarError ? (
-                <img
-                  src={profile.avatarUrl}
-                  alt=""
-                  onError={() => setAvatarError(true)}
-                  className="size-full rounded-full object-cover"
-                />
-              ) : (
-                <span>{initials}</span>
-              )}
-            </div>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Log out</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to log out? You will need to sign in again
+              to access your chats and settings.
+            </DialogDescription>
+          </DialogHeader>
 
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">
-                {user?.name || profile.fullName || "My account"}
-              </p>
+          {actionError && logoutDialogOpen && (
+            <p role="alert" className="text-sm text-destructive">
+              {actionError}
+            </p>
+          )}
 
-              <p className="truncate text-xs text-muted-foreground">
-                {user?.email || profile.email || ""}
-              </p>
-            </div>
-          </button>
-        </DropdownMenuTrigger>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isLoggingOut}
+              onClick={() => setLogoutDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isLoggingOut}
+              onClick={() => void handleConfirmLogout()}
+            >
+              {isLoggingOut ? "Logging out..." : "Log out"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        <DropdownMenuContent
-          side="top"
-          align="start"
-          sideOffset={8}
-          className="w-dropdown min-w-48"
-        >
-          <DropdownMenuItem
-            onSelect={() =>
-              router.push("/chat?view=settings&section=profile")
-            }
-          >
-            <Settings className="mr-2 size-4" />
-            Settings
-          </DropdownMenuItem>
+      {/* Delete Account Confirmation Popup */}
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isDeletingAccount) {
+            setDeleteDialogOpen(open);
+            if (!open) setActionError("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete account</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to permanently delete your account? All your
+              conversations, messages, and saved API keys will be erased and
+              cannot be recovered.
+            </DialogDescription>
+          </DialogHeader>
 
-          <DropdownMenuSeparator />
+          {actionError && deleteDialogOpen && (
+            <p role="alert" className="text-sm text-destructive">
+              {actionError}
+            </p>
+          )}
 
-          <DropdownMenuItem
-            disabled={loggingOut}
-            onSelect={handleLogout}
-          >
-            <LogOut className="mr-2 size-4 text-destructive" />
-            <span className="text-destructive">Log out</span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {logoutError && (
-        <p role="alert" className="px-3 pt-2 text-xs text-destructive">
-          {logoutError}
-        </p>
-      )}
-    </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isDeletingAccount}
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isDeletingAccount}
+              onClick={() => void handleConfirmDeleteAccount()}
+            >
+              {isDeletingAccount ? "Deleting..." : "Delete account"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
