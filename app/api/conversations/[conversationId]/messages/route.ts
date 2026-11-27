@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth/server";
 import { sql } from "@/lib/db";
 import { decryptApiKey } from "@/lib/crypto";
-import { generateGeminiResponse } from "@/lib/gemini";
+import { GeminiApiError, generateGeminiResponse } from "@/lib/gemini";
 import type { ChatMessage } from "@/features/chat/types/chat.types";
 import { DEFAULT_GEMINI_MODEL, isValidGeminiModel } from "@/lib/models";
 
@@ -52,11 +52,13 @@ async function ownsConversation(conversationId: string, userId: string) {
   return rows.length > 0;
 }
 
-async function getUserGeminiApiKey(
+async function getUserGeminiConfig(
   userId: string,
-): Promise<string | undefined> {
+): Promise<{ apiKeyId: string; apiKey: string } | undefined> {
   const rows = await sql`
-    SELECT ak.encrypted_key
+    SELECT
+      ak.id::text AS "apiKeyId",
+      ak.encrypted_key AS "encryptedKey"
     FROM public.api_keys AS ak
     INNER JOIN public.profiles AS p
       ON p.id = ak.profile_id
@@ -66,12 +68,51 @@ async function getUserGeminiApiKey(
     LIMIT 1
   `;
 
-  const encrypted = rows[0]?.encrypted_key;
-  if (!encrypted || typeof encrypted !== "string") {
+  const row = rows[0];
+  if (
+    !row?.apiKeyId ||
+    !row?.encryptedKey ||
+    typeof row.encryptedKey !== "string"
+  ) {
     return undefined;
   }
 
-  return decryptApiKey(encrypted);
+  return {
+    apiKeyId: String(row.apiKeyId),
+    apiKey: decryptApiKey(row.encryptedKey),
+  };
+}
+
+async function logCustomKeyUsage(params: {
+  apiKeyId: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  statusCode: number;
+  errorMessage?: string;
+}) {
+  try {
+    await sql`
+      INSERT INTO public.api_usage_logs (
+        api_key_id,
+        model,
+        input_tokens,
+        output_tokens,
+        status_code,
+        error_message
+      )
+      VALUES (
+        ${params.apiKeyId}::bigint,
+        ${params.model},
+        ${params.inputTokens},
+        ${params.outputTokens},
+        ${params.statusCode},
+        ${params.errorMessage ?? null}
+      )
+    `;
+  } catch (logError) {
+    console.error("Failed to record API usage log:", logError);
+  }
 }
 
 function parseStoredMessages(raw: unknown): StoredMessage[] {
@@ -224,7 +265,6 @@ export async function POST(request: Request, { params }: RouteContext) {
         ? body.model
         : DEFAULT_GEMINI_MODEL;
 
-    // Load existing conversation history from the single row.
     const existingRows = await sql`
       SELECT message
       FROM public.messages
@@ -241,20 +281,54 @@ export async function POST(request: Request, { params }: RouteContext) {
       { role: "user", content },
     ];
 
-    // Use user's personal Gemini key if configured, otherwise fallback to server env key.
-    const userApiKey = await getUserGeminiApiKey(user.id);
-    const assistantContent = await generateGeminiResponse(
-      history,
-      userApiKey,
-      selectedModel,
-    );
+    const userGemini = await getUserGeminiConfig(user.id);
+    let assistantContent: string;
+
+    try {
+      const generation = await generateGeminiResponse(
+        history,
+        userGemini?.apiKey,
+        selectedModel,
+      );
+
+      assistantContent = generation.text;
+
+      if (userGemini) {
+        await logCustomKeyUsage({
+          apiKeyId: userGemini.apiKeyId,
+          model: generation.model,
+          inputTokens: generation.inputTokens,
+          outputTokens: generation.outputTokens,
+          statusCode: 200,
+        });
+      }
+    } catch (genError) {
+      if (userGemini) {
+        const statusCode =
+          genError instanceof GeminiApiError ? genError.status : 500;
+        const errorMessage =
+          genError instanceof Error
+            ? genError.message.slice(0, 250)
+            : "Unknown error";
+
+        await logCustomKeyUsage({
+          apiKeyId: userGemini.apiKeyId,
+          model: selectedModel,
+          inputTokens: 0,
+          outputTokens: 0,
+          statusCode,
+          errorMessage,
+        });
+      }
+
+      throw genError;
+    }
 
     const newPair: StoredMessage[] = [
       { role: "user", content },
       { role: "assistant", content: assistantContent },
     ];
 
-    // Append both messages into the single jsonb array row.
     const updatedRow = await sql.begin(async (tx) => {
       const rows = await tx`
         INSERT INTO public.messages (
